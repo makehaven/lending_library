@@ -172,9 +172,30 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
         }
     }
 
+    if ($library_item_node) {
+        $info_markup = '<div class="lending-library-form-info">';
+        $info_markup .= '<h3>' . $library_item_node->label() . '</h3>';
+        
+        $location_parts = [];
+        if ($library_item_node->hasField('field_library_location_row_item') && !$library_item_node->get('field_library_location_row_item')->isEmpty()) {
+            $location_parts[] = t('Row: @row', ['@row' => $library_item_node->get('field_library_location_row_item')->value]);
+        }
+        if ($library_item_node->hasField('field_library_location_shelf_num') && !$library_item_node->get('field_library_location_shelf_num')->isEmpty()) {
+            $location_parts[] = t('Shelf: @shelf', ['@shelf' => $library_item_node->get('field_library_location_shelf_num')->value]);
+        }
+        if (!empty($location_parts)) {
+            $info_markup .= '<div class="location">' . implode(', ', $location_parts) . '</div>';
+        }
+        $info_markup .= '</div>';
+
+        $form['tool_info'] = [
+            '#markup' => $info_markup,
+            '#weight' => -100,
+        ];
+    }
+
     if ($predefined_action && isset($form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD])) {
       $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['#disabled'] = TRUE;
-      // Field hiding logic (ensure this is complete from your previous version)
         switch ($predefined_action) {
             case LENDING_LIBRARY_ACTION_WITHDRAW:
                 if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD]['#access'] = FALSE;
@@ -199,7 +220,6 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
                 break;
         }
     } elseif (isset($form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#options'])) {
-      // Dynamic filtering of actions (ensure this is complete from your previous version)
         $allowed_actions = [];
         $original_options = $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#options'];
         if ($item_details) { 
@@ -297,9 +317,12 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
 
     if (isset($form['field_library_borrow_inspect_img'])) {
         $form['field_library_borrow_inspect_img']['widget'][0]['#alt_field'] = FALSE;
+        $form['field_library_borrow_inspect_img']['widget'][0]['#process'][] = '_lending_library_add_capture_attribute';
+
     }
     if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD])) {
          $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['widget'][0]['#alt_field'] = FALSE;
+         $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['widget'][0]['#process'][] = '_lending_library_add_capture_attribute';
     }
 
     $action_selector = ':input[name="' . LENDING_LIBRARY_TRANSACTION_ACTION_FIELD . '"]';
@@ -429,7 +452,6 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
             $selected_battery_names = [];
             $battery_target_ids = [];
 
-            // --- FATAL ERROR FIX: Use a safer foreach loop instead of array_map ---
             if (is_array($borrowed_batteries_values)) {
                 foreach ($borrowed_batteries_values as $item) {
                     if (is_array($item) && isset($item['target_id'])) {
@@ -450,6 +472,7 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
             }
             
             \Drupal::messenger()->addStatus($message);
+            _lending_library_send_checkout_email($transaction_entity);
             $form_state->setRedirectUrl(Url::fromUri('internal:/library'));
             break;
 
@@ -544,22 +567,18 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
         $library_item_node = $entity;
         $item_details = _lending_library_get_item_details($library_item_node);
         
-        // --- FEATURE: Display the current status of the tool ---
         if ($item_details) {
-            // Add a CSS class based on the status for styling.
             $status_class = 'status-' . preg_replace('/[^a-z0-9\-]+/', '-', strtolower($item_details['status']));
             $status_markup = '<div class="lending-library-status ' . $status_class . '">';
             $status_markup .= '<strong>' . t('Status:') . '</strong> ' . ucfirst($item_details['status']);
 
             if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid']) {
-                // Only show borrower info to logged-in users.
                 if (!$current_user->isAnonymous()) {
                     $borrower_account = User::load($item_details['borrower_uid']);
                     if ($borrower_account) {
                         $borrower_link = Link::fromTextAndUrl($borrower_account->getDisplayName(), $borrower_account->toUrl())->toString();
                         $status_markup .= ' ' . t('by @username', ['@username' => $borrower_link]);
 
-                        // Get loan details from the latest transaction.
                         $loan_details = _lending_library_get_current_loan_details($library_item_node);
                         if ($loan_details) {
                             $date_formatter = \Drupal::service('date.formatter');
@@ -580,7 +599,6 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
             ];
         }
 
-        // --- FIX: Check for 'borrower' role before showing action links ---
         if (!$current_user->hasRole('borrower')) {
             return;
         }
@@ -627,4 +645,75 @@ function lending_library_library_info_build() {
         ],
     ];
     return $libraries;
+}
+
+/**
+ * Process callback to add the 'capture' attribute to file inputs.
+ */
+function _lending_library_add_capture_attribute(&$element, FormStateInterface $form_state, &$complete_form) {
+    if (isset($element['upload'])) {
+      $element['upload']['#attributes']['capture'] = 'environment';
+    }
+    return $element;
+}
+
+/**
+ * Sends a checkout confirmation email to the borrower.
+ */
+function _lending_library_send_checkout_email(EntityInterface $transaction_entity) {
+    $mailManager = \Drupal::service('plugin.manager.mail');
+    $module = 'lending_library';
+    $key = 'checkout_confirmation';
+
+    $borrower_uid = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->target_id;
+    $borrower_user = User::load($borrower_uid);
+    if (!$borrower_user) {
+        return;
+    }
+    $to = $borrower_user->getEmail();
+
+    $library_item_node_id = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
+    $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node_id);
+    if (!$library_item_node) {
+        return;
+    }
+
+    $params = [
+        'tool_name' => $library_item_node->label(),
+        'replacement_value' => $library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value,
+        'due_date' => $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date->format('F j, Y'),
+    ];
+
+    $langcode = $borrower_user->getPreferredLangcode();
+    $send = TRUE;
+
+    $result = $mailManager->mail($module, $key, $to, $langcode, $params, NULL, $send);
+    if ($result['result'] !== TRUE) {
+        \Drupal::logger('lending_library')->error('Failed to send checkout confirmation email to @email.', ['@email' => $to]);
+    }
+}
+
+/**
+ * Implements hook_mail().
+ */
+function lending_library_mail($key, &$message, $params) {
+    switch ($key) {
+        case 'checkout_confirmation':
+            $message['subject'] = t('Tool Checkout Confirmation: @tool_name', ['@tool_name' => $params['tool_name']]);
+            $body = [];
+            $body[] = t('You have successfully checked out the following tool from the MakeHaven Lending Library:');
+            $body[] = '';
+            $body[] = t('Tool: @tool_name', ['@tool_name' => $params['tool_name']]);
+            $body[] = t('Replacement Value: $@value', ['@value' => number_format($params['replacement_value'], 2)]);
+            $body[] = '';
+            $body[] = t('This item is due on or before: @due_date.', ['@due_date' => $params['due_date']]);
+            $body[] = '';
+            $body[] = t('Please remember that late fees will be charged for overdue items: $5 per tool for the first week, and $10 per day thereafter until the tool is returned.');
+            $body[] = '';
+            $body[] = t('Thank you,');
+            $body[] = t('The MakeHaven Team');
+
+            $message['body'][] = implode("\n", $body);
+            break;
+    }
 }
