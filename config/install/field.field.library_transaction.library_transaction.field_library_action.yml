@@ -1,0 +1,21 @@
+uuid: 985d2f38-e0c9-4d3d-a399-354dd3994b67
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_action
+  module:
+    - options
+id: library_transaction.library_transaction.field_library_action
+field_name: field_library_action
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Library Action'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: list_string

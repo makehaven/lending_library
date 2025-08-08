@@ -1,0 +1,23 @@
+uuid: dfbc11f6-8839-4091-8490-6151bbe7e2bd
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.storage.battery.field_battery_number
+id: battery.battery.field_battery_number
+field_name: field_battery_number
+entity_type: battery
+bundle: battery
+label: 'Battery Number'
+description: ''
+required: true
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  min: 0
+  max: null
+  prefix: ''
+  suffix: ''
+field_type: integer

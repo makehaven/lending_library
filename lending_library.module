@@ -1,0 +1,630 @@
+<?php
+
+/**
+ * @file
+ * Contains lending_library.module.
+ */
+
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Datetime\DrupalDateTime;
+use Drupal\Core\Url;
+use Drupal\node\NodeInterface;
+use Drupal\Core\Link;
+use Drupal\user\Entity\User;
+
+// --- CONFIGURATION CONSTANTS ---
+define('LENDING_LIBRARY_ITEM_NODE_TYPE', 'library_item');
+
+define('LENDING_LIBRARY_ITEM_STATUS_FIELD', 'field_library_item_status');
+define('LENDING_LIBRARY_ITEM_BORROWER_FIELD', 'field_library_item_borrower');
+define('LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD', 'field_library_item_uses_battery');
+define('LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD', 'field_library_item_replacement_v');
+
+define('LENDING_LIBRARY_TRANSACTION_ACTION_FIELD', 'field_library_action');
+define('LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD', 'field_library_item');
+define('LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD', 'field_library_borrower');
+define('LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD', 'field_library_inspection_issues');
+define('LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD', 'field_library_return_date');
+define('LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD', 'field_library_return_inspect_img');
+define('LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD', 'field_library_borrow_date');
+define('LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD', 'field_library_due_date');
+define('LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD', 'field_library_renew_count');
+define('LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD', 'field_library_borrow_batteries');
+
+define('LENDING_LIBRARY_ITEM_STATUS_AVAILABLE', 'available');
+define('LENDING_LIBRARY_ITEM_STATUS_BORROWED', 'borrowed');
+define('LENDING_LIBRARY_ITEM_STATUS_MISSING', 'missing');
+define('LENDING_LIBRARY_ITEM_STATUS_REPAIR', 'repair');
+define('LENDING_LIBRARY_ITEM_STATUS_RETIRED', 'retired');
+
+define('LENDING_LIBRARY_ACTION_WITHDRAW', 'withdraw');
+define('LENDING_LIBRARY_ACTION_RETURN', 'return');
+define('LENDING_LIBRARY_ACTION_DAMAGE', 'damage');
+
+define('LENDING_LIBRARY_INSPECTION_NO_ISSUES', 'no_issues');
+define('LENDING_LIBRARY_INSPECTION_DAMAGE', 'damage');
+define('LENDING_LIBRARY_INSPECTION_MISSING', 'missing');
+define('LENDING_LIBRARY_INSPECTION_OTHER', 'other');
+// --- END CONFIGURATION CONSTANTS ---
+
+
+/**
+ * Helper function to get status, borrower, and replacement value from the library_item node.
+ */
+function _lending_library_get_item_details(NodeInterface $library_item_node = NULL) {
+  if (!$library_item_node || $library_item_node->bundle() !== LENDING_LIBRARY_ITEM_NODE_TYPE) {
+    return NULL;
+  }
+
+  $status = LENDING_LIBRARY_ITEM_STATUS_AVAILABLE;
+  if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_STATUS_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_STATUS_FIELD)->isEmpty()) {
+    $status = $library_item_node->get(LENDING_LIBRARY_ITEM_STATUS_FIELD)->value;
+  } else {
+     \Drupal::logger('lending_library')->warning('Library item node @nid is missing status field value. Defaulting to available.', ['@nid' => $library_item_node->id()]);
+  }
+
+  $borrower_uid = NULL;
+  if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_BORROWER_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_BORROWER_FIELD)->isEmpty()) {
+    $borrower_uid = $library_item_node->get(LENDING_LIBRARY_ITEM_BORROWER_FIELD)->target_id;
+  }
+  
+  $replacement_value = NULL;
+  if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->isEmpty()) {
+    $raw_value = $library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value;
+    if (is_numeric($raw_value)) {
+        $replacement_value = $raw_value;
+    }
+  }
+
+  return ['status' => $status, 'borrower_uid' => $borrower_uid, 'replacement_value' => $replacement_value];
+}
+
+/**
+ * Helper function to get the borrow and due dates from the latest transaction.
+ */
+function _lending_library_get_current_loan_details(NodeInterface $library_item_node) {
+  if (!$library_item_node) {
+    return NULL;
+  }
+
+  $query = \Drupal::entityQuery('library_transaction')
+    ->condition('field_library_item', $library_item_node->id())
+    ->condition('field_library_action', 'withdraw')
+    ->sort('created', 'DESC')
+    ->range(0, 1)
+    ->accessCheck(FALSE);
+
+  $transaction_ids = $query->execute();
+
+  if (empty($transaction_ids)) {
+    return NULL;
+  }
+
+  $transaction_id = reset($transaction_ids);
+  $transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load($transaction_id);
+
+  if (!$transaction) {
+    return NULL;
+  }
+
+  $borrow_date = NULL;
+  if ($transaction->hasField(LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD) && !$transaction->get(LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD)->isEmpty()) {
+    $borrow_date = $transaction->get(LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD)->date;
+  }
+
+  $due_date = NULL;
+  if ($transaction->hasField(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD) && !$transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
+    $due_date = $transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
+  }
+
+  return ['borrow_date' => $borrow_date, 'due_date' => $due_date];
+}
+
+
+/**
+ * Implements hook_form_FORM_ID_alter() for the library_transaction entity form.
+ */
+function lending_library_form_library_transaction_library_transaction_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  $form_object = $form_state->getFormObject();
+  if (method_exists($form_object, 'getEntity')) {
+    $transaction_entity = $form_object->getEntity();
+    if ($transaction_entity && $transaction_entity->getEntityTypeId() === 'library_transaction' && $transaction_entity->bundle() === 'library_transaction') {
+      _lending_library_transaction_form_logic($form, $form_state, $transaction_entity);
+    }
+  }
+}
+
+/**
+ * Helper function to apply conditional logic and defaults to library transaction forms.
+ */
+function _lending_library_transaction_form_logic(&$form, FormStateInterface $form_state, EntityInterface $transaction_entity) {
+    $current_user = \Drupal::currentUser();
+    $library_item_node = NULL;
+    $tool_requires_batteries = FALSE;
+    $item_details = NULL; 
+  
+    if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty()) {
+      $library_item_node_id = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
+      if ($library_item_node_id) {
+        $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node_id);
+        if ($library_item_node instanceof NodeInterface) {
+            $item_details = _lending_library_get_item_details($library_item_node);
+            if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD)->isEmpty()) {
+              $tool_requires_batteries = (bool) $library_item_node->get(LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD)->value;
+            }
+        }
+      }
+    }
+  
+    $route_match = \Drupal::routeMatch();
+    $predefined_action = $route_match->getParameter('action_type');
+    
+    $current_action = $predefined_action;
+    if (!$current_action) {
+        $action_field_value_from_state = $form_state->getValue(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD);
+        if (is_array($action_field_value_from_state) && isset($action_field_value_from_state[0]['value'])) {
+            $current_action = $action_field_value_from_state[0]['value'];
+        } elseif (!is_array($action_field_value_from_state) && !empty($action_field_value_from_state)) {
+            $current_action = $action_field_value_from_state;
+        } elseif ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->isEmpty()){
+            $current_action = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->value;
+        }
+    }
+
+    if ($predefined_action && isset($form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD])) {
+      $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['#disabled'] = TRUE;
+      // Field hiding logic (ensure this is complete from your previous version)
+        switch ($predefined_action) {
+            case LENDING_LIBRARY_ACTION_WITHDRAW:
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD]['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD]['#access'] = FALSE;
+                break;
+            case LENDING_LIBRARY_ACTION_RETURN:
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD]['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD]['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] = FALSE;
+                if (isset($form['field_library_borrow_inspect_img'])) $form['field_library_borrow_inspect_img']['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#access'] = FALSE;
+                if (isset($form['field_library_inspection_notes'])) $form['field_library_inspection_notes']['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD]['#disabled'] = TRUE;
+                break;
+            case LENDING_LIBRARY_ACTION_DAMAGE:
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD]['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD]['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] = FALSE;
+                if (isset($form['field_library_borrow_inspect_img'])) $form['field_library_borrow_inspect_img']['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD]['#access'] = FALSE;
+                if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['#access'] = FALSE;
+                break;
+        }
+    } elseif (isset($form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#options'])) {
+      // Dynamic filtering of actions (ensure this is complete from your previous version)
+        $allowed_actions = [];
+        $original_options = $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#options'];
+        if ($item_details) { 
+            switch ($item_details['status']) {
+                case LENDING_LIBRARY_ITEM_STATUS_AVAILABLE:
+                    $allowed_actions[LENDING_LIBRARY_ACTION_WITHDRAW] = $original_options[LENDING_LIBRARY_ACTION_WITHDRAW] ?? t('Withdraw');
+                    break;
+                case LENDING_LIBRARY_ITEM_STATUS_BORROWED:
+                    if ($item_details['borrower_uid'] == $current_user->id()) {
+                        $allowed_actions[LENDING_LIBRARY_ACTION_RETURN] = $original_options[LENDING_LIBRARY_ACTION_RETURN] ?? t('Return');
+                    }
+                    break;
+            }
+        }
+        if (isset($original_options[LENDING_LIBRARY_ACTION_DAMAGE])) {
+            $allowed_actions[LENDING_LIBRARY_ACTION_DAMAGE] = $original_options[LENDING_LIBRARY_ACTION_DAMAGE];
+        }
+        $new_options = [];
+        if (isset($original_options['_none'])) $new_options['_none'] = $original_options['_none'];
+        foreach ($allowed_actions as $key => $label) {
+            if (isset($original_options[$key])) $new_options[$key] = $original_options[$key];
+        }
+        $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#options'] = $new_options;
+        $default_action_value = $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#default_value'] ?? NULL;
+        if ($default_action_value && !isset($new_options[$default_action_value])) {
+            $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['widget']['#default_value'] = '_none';
+        }
+        $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD]['#disabled'] = (count($new_options) <= 1 && isset($new_options['_none'])) || count($new_options) === 0;
+    }
+
+    if (isset($form['actions']['submit'])) {
+        switch ($current_action) {
+            case LENDING_LIBRARY_ACTION_WITHDRAW:
+                $form['actions']['submit']['#value'] = t('Confirm Withdrawal & Agree');
+                break;
+            case LENDING_LIBRARY_ACTION_RETURN:
+                $form['actions']['submit']['#value'] = t('Confirm Return');
+                break;
+            case LENDING_LIBRARY_ACTION_DAMAGE:
+                $form['actions']['submit']['#value'] = t('Submit Report');
+                break;
+        }
+    }
+
+    if ($current_action === LENDING_LIBRARY_ACTION_WITHDRAW) {
+        $due_date_display = t('N/A - Due date will be calculated upon withdrawal.');
+        if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
+            $due_date_value_raw = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->value;
+            if ($due_date_value_raw) {
+                try {
+                    $due_date_object = DrupalDateTime::createFromFormat('Y-m-d', $due_date_value_raw);
+                    if ($due_date_object instanceof DrupalDateTime && empty(DrupalDateTime::getLastErrors())) {
+                        $due_date_display = \Drupal::service('date.formatter')->format($due_date_object->getTimestamp(), 'long');
+                    } else {
+                        $due_date_display = $due_date_value_raw . t(' (Unable to format date. Check system logs.)');
+                        \Drupal::logger('lending_library')->warning('Could not create valid DrupalDateTime object for due date display from value: @value. Errors: @errors', ['@value' => $due_date_value_raw, '@errors' => print_r(DrupalDateTime::getLastErrors(), TRUE)]);
+                    }
+                } catch (\Exception $e) {
+                    $due_date_display = $due_date_value_raw . t(' (Error during date formatting.)');
+                    \Drupal::logger('lending_library')->error('Exception formatting due date for agreement: @message. Value was: @value', ['@message' => $e->getMessage(), '@value' => $due_date_value_raw]);
+                }
+            }
+        }
+
+        $agreement_text = '<div class="lending-library-agreement">';
+        $agreement_text .= '<h4>' . t('Borrowing Member Affirms') . '</h4>';
+        $agreement_text .= '<p>' . t('I have:') . '</p><ul>';
+        $agreement_text .= '<li>' . t('Signed the tool borrowing policy and MakeHaven Lending Library Waiver, Release & Indemnification, and have read the most updated policy.') . '</li>';
+        $agreement_text .= '<li>' . t('Acquired the required badges, safety checkout and have reviewed manufacturer\'s instructions for this tool.') . '</li>';
+        $agreement_text .= '<li>' . t('Inspected the tool, and it is in good order.') . '</li></ul>';
+        $agreement_text .= '<p>' . t('I will be:') . '</p><ul>';
+        $agreement_text .= '<li>' . t('The only user of the tool and control access to the tool.') . '</li>';
+        $agreement_text .= '<li>' . t('Responsible for damage/loss.');
+        if ($item_details && isset($item_details['replacement_value']) && is_numeric($item_details['replacement_value'])) {
+            $agreement_text .= ' ' . t('(Replacement Value: $@value)', ['@value' => number_format($item_details['replacement_value'], 2)]);
+        }
+        $agreement_text .= '</li>';
+        if ($tool_requires_batteries && isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]) && ($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] ?? TRUE)) {
+            $agreement_text .= '<li>' . t('Responsible for any batteries borrowed with this tool, including their replacement if lost or damaged.') . '</li>';
+        }
+        $agreement_text .= '</ul>';
+        $agreement_text .= '<h4>' . t('Loan Terms') . '</h4><ul>';
+        $agreement_text .= '<li><strong>' . t('Due Date:') . '</strong> ' . $due_date_display . '</li>';
+        $agreement_text .= '<li>' . t('All tools borrowed are to be returned no later than seven days after checkout.') . '</li>';
+        $agreement_text .= '<li>' . t('Late fees will be charged for overdue items: $5 per tool for the first week, and $10 per day thereafter until the tool is returned. Full cost of tool plus fees will be charged at 30 days. Late fees are capped at 150% of full replacement cost of the tool, plus cost of any additional batteries.') . '</li></ul>';
+        $enrollment_url = Url::fromUri('internal:/tool-lending-library-enrollment');
+        
+        $agreement_text .= '<p>' . t('Our full rules are at @link.', ['@link' => Link::fromTextAndUrl(t('the enrollment form'), $enrollment_url)->toString()]) . '</p>';
+        
+        $agreement_text .= '</div>';
+
+        $form['lending_library_agreement_text'] = ['#type' => 'markup', '#markup' => $agreement_text, '#weight' => 50];
+        $form['lending_library_agreement_acknowledge'] = ['#type' => 'checkbox', '#title' => t('I acknowledge and agree to the terms stated above, including the due date and potential late fees.'), '#required' => TRUE, '#weight' => 51];
+    }
+
+    if (isset($form['field_library_borrow_inspect_img'])) {
+        $form['field_library_borrow_inspect_img']['widget'][0]['#alt_field'] = FALSE;
+    }
+    if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD])) {
+         $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['widget'][0]['#alt_field'] = FALSE;
+    }
+
+    $action_selector = ':input[name="' . LENDING_LIBRARY_TRANSACTION_ACTION_FIELD . '"]';
+    if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD])) {
+        if ($tool_requires_batteries) {
+            $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#states'] = ['visible' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_WITHDRAW]], 'required' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_WITHDRAW]]];
+            if ($current_action === LENDING_LIBRARY_ACTION_WITHDRAW) { 
+                 $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] = TRUE;
+            }
+        } else {
+            $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] = FALSE;
+        }
+    }
+    if (isset($form['field_library_borrow_inspect_img'])) {
+        $form['field_library_borrow_inspect_img']['#states'] = ['visible' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_WITHDRAW]], 'required' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_WITHDRAW]]];
+    }
+    if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD])) {
+        $form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD]['#states'] = ['visible' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_RETURN]]];
+    }
+    if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD])) {
+        $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['#states'] = ['visible' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_RETURN]], 'required' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_RETURN]]];
+    }
+    if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) {
+        $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#states'] = ['visible' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_DAMAGE]], 'required' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_DAMAGE]]];
+    }
+    if (isset($form['field_library_inspection_notes'])) {
+        $form['field_library_inspection_notes']['#states'] = ['visible' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_DAMAGE]], 'required' => [$action_selector => ['value' => LENDING_LIBRARY_ACTION_DAMAGE]]];
+    }
+  
+  $form['#validate'][] = '_lending_library_transaction_form_validate';
+  
+  if (isset($form['actions']['submit'])) {
+    $form['actions']['submit']['#submit'][] = '_lending_library_transaction_form_submit';
+  }
+}
+
+/**
+ * Custom validation handler for library transaction forms.
+ */
+function _lending_library_transaction_form_validate(&$form, FormStateInterface $form_state) {
+  $action_element = $form[LENDING_LIBRARY_TRANSACTION_ACTION_FIELD];
+  $action = '';
+  if (!empty($action_element['#disabled'])) {
+    $transaction_entity = $form_state->getFormObject()->getEntity();
+    if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->isEmpty()) {
+        $action = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->value;
+    }
+  } else {
+      $action_value_item = $form_state->getValue(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD);
+      $action = is_array($action_value_item) ? ($action_value_item[0]['value'] ?? NULL) : $action_value_item;
+  }
+  
+  if ($action === LENDING_LIBRARY_ACTION_WITHDRAW) {
+    if (!$form_state->getValue('lending_library_agreement_acknowledge')) {
+      $form_state->setErrorByName('lending_library_agreement_acknowledge', t('You must acknowledge and agree to the terms before borrowing this tool.'));
+    }
+  }
+
+    $library_item_node = NULL;
+    $library_item_node_id = NULL;
+    $transaction_entity_for_item = $form_state->getFormObject()->getEntity();
+    if ($transaction_entity_for_item->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) && !$transaction_entity_for_item->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty()) {
+        $library_item_node_id = $transaction_entity_for_item->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
+    }
+
+    if ($library_item_node_id) {
+        $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node_id);
+    }
+
+    if ($action === LENDING_LIBRARY_ACTION_RETURN) {
+        $return_date_element_path = [LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD, 0, 'value'];
+        $return_date_value_from_state = $form_state->getValue($return_date_element_path);
+        if (empty($return_date_value_from_state)) {
+            $today_datetime = new DrupalDateTime('now');
+            $date_format = 'Y-m-d';
+            $form_state->setValue($return_date_element_path, $today_datetime->format($date_format));
+        }
+        $return_image_value = $form_state->getValue(LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD);
+        if (empty($return_image_value[0]['fids']) && empty($return_image_value[0]['target_id'])) {
+            $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD, t('Return Inspection Image is required when returning an item.'));
+        }
+    }
+
+    if ($library_item_node instanceof NodeInterface) {
+        $item_details = _lending_library_get_item_details($library_item_node);
+        $current_user_id = \Drupal::currentUser()->id();
+        if ($action === LENDING_LIBRARY_ACTION_WITHDRAW) {
+            if ($item_details && $item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
+                $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, t('This item is not currently available for withdrawal. Its status is: @status.', ['@status' => $item_details['status']]));
+            }
+        }
+        elseif ($action === LENDING_LIBRARY_ACTION_RETURN) {
+            if ($item_details && $item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_BORROWED) {
+                $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, t('This item is not currently marked as borrowed.'));
+            } elseif ($item_details && $item_details['borrower_uid'] != $current_user_id) {
+                $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, t('You are not the current borrower of this item.'));
+            }
+        }
+    } elseif ($action === LENDING_LIBRARY_ACTION_WITHDRAW || $action === LENDING_LIBRARY_ACTION_RETURN) {
+        $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, t('Library item context is missing or invalid for this action.'));
+    }
+}
+
+/**
+ * Custom submit handler for library transaction forms.
+ */
+function _lending_library_transaction_form_submit(array &$form, FormStateInterface $form_state) {
+    $transaction_entity = $form_state->getFormObject()->getEntity();
+    if (!$transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD) || $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->isEmpty()) {
+        return;
+    }
+    $action = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->value;
+
+    $library_item_node = NULL;
+    if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty()) {
+        $library_item_node_id = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
+        if ($library_item_node_id) {
+            $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node_id);
+        }
+    }
+    $tool_name = $library_item_node ? $library_item_node->label() : t('The tool');
+
+    switch ($action) {
+        case LENDING_LIBRARY_ACTION_WITHDRAW:
+            $message = t('@tool_name has been successfully withdrawn. Please remember to take the tool.', ['@tool_name' => $tool_name]);
+            $borrowed_batteries_values = $form_state->getValue(LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD);
+            $selected_battery_names = [];
+            $battery_target_ids = [];
+
+            // --- FATAL ERROR FIX: Use a safer foreach loop instead of array_map ---
+            if (is_array($borrowed_batteries_values)) {
+                foreach ($borrowed_batteries_values as $item) {
+                    if (is_array($item) && isset($item['target_id'])) {
+                        $battery_target_ids[] = $item['target_id'];
+                    }
+                }
+            }
+
+            if (!empty($battery_target_ids)) {
+                $batteries = \Drupal::entityTypeManager()->getStorage('battery')->loadMultiple($battery_target_ids);
+                foreach ($batteries as $battery_entity) {
+                    $selected_battery_names[] = $battery_entity->label();
+                }
+            }
+
+            if (!empty($selected_battery_names)) {
+                $message .= ' ' . t('You have also borrowed the following batteries: @batteries. Please ensure you take these as well.', ['@batteries' => implode(', ', $selected_battery_names)]);
+            }
+            
+            \Drupal::messenger()->addStatus($message);
+            $form_state->setRedirectUrl(Url::fromUri('internal:/library'));
+            break;
+
+        case LENDING_LIBRARY_ACTION_RETURN:
+            \Drupal::messenger()->addStatus(t('@tool_name has been successfully returned. Thank you!', ['@tool_name' => $tool_name]));
+            $form_state->setRedirectUrl(Url::fromUri('internal:/library/borrowed'));
+            break;
+
+        case LENDING_LIBRARY_ACTION_DAMAGE:
+            \Drupal::messenger()->addStatus(t('Your damage report for @tool_name has been submitted.', ['@tool_name' => $tool_name]));
+            if ($library_item_node) {
+                $form_state->setRedirectUrl($library_item_node->toUrl());
+            }
+            break;
+    }
+}
+
+/**
+ * Implements hook_entity_presave().
+ */
+function lending_library_entity_presave(EntityInterface $transaction_entity) {
+    if ($transaction_entity->getEntityTypeId() === 'library_transaction' && $transaction_entity->bundle() === 'library_transaction') {
+        if (!$transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) || $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty() ||
+            !$transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD) || $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->isEmpty()) {
+            \Drupal::logger('lending_library')->warning('Transaction @id missing item reference or action during presave.', ['@id' => $transaction_entity->id()]);
+            return;
+        }
+        $library_item_node_id = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
+        $action = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->value;
+        if (!$library_item_node_id) {
+            \Drupal::logger('lending_library')->warning('Transaction @id has no library item node ID during presave.', ['@id' => $transaction_entity->id()]);
+            return;
+        }
+        $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node_id);
+        if ($library_item_node instanceof NodeInterface && $library_item_node->bundle() === LENDING_LIBRARY_ITEM_NODE_TYPE) {
+            $transaction_borrower_uid = $transaction_entity->getOwnerId();
+            if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->isEmpty()) {
+                $transaction_borrower_uid = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->target_id;
+            }
+            $save_item_node = FALSE;
+            switch ($action) {
+                case LENDING_LIBRARY_ACTION_WITHDRAW:
+                    $current_item_status_field = $library_item_node->get(LENDING_LIBRARY_ITEM_STATUS_FIELD);
+                    $current_item_status = $current_item_status_field->isEmpty() ? LENDING_LIBRARY_ITEM_STATUS_AVAILABLE : $current_item_status_field->value;
+                    if ($current_item_status === LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
+                        if ($transaction_borrower_uid) {
+                            $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_BORROWED);
+                            $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, ['target_id' => $transaction_borrower_uid]);
+                            $save_item_node = TRUE;
+                        } else {
+                            \Drupal::logger('lending_library')->error('Withdraw transaction @tid lacks a borrower for item @nid.', ['@tid' => $transaction_entity->id(), '@nid' => $library_item_node_id]);
+                        }
+                    } else {
+                        \Drupal::logger('lending_library')->warning('Presave: Attempted to withdraw item @nid which is not available (status: @status) via transaction @tid.', ['@nid' => $library_item_node_id, '@status' => $current_item_status, '@tid' => $transaction_entity->id()]);
+                    }
+                    break;
+                case LENDING_LIBRARY_ACTION_RETURN:
+                    $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE);
+                    $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
+                    $save_item_node = TRUE;
+                    break;
+                case LENDING_LIBRARY_ACTION_DAMAGE:
+                    $new_status_based_on_damage = NULL;
+                    if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD)->isEmpty()) {
+                        $issue_type = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD)->value;
+                        switch ($issue_type) {
+                            case LENDING_LIBRARY_INSPECTION_MISSING: $new_status_based_on_damage = LENDING_LIBRARY_ITEM_STATUS_MISSING; break;
+                            case LENDING_LIBRARY_INSPECTION_DAMAGE: case LENDING_LIBRARY_INSPECTION_OTHER: $new_status_based_on_damage = LENDING_LIBRARY_ITEM_STATUS_REPAIR; break;
+                        }
+                    }
+                    if ($new_status_based_on_damage) {
+                        $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, $new_status_based_on_damage);
+                        $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
+                        $save_item_node = TRUE;
+                    }
+                    break;
+            }
+            if ($save_item_node) $library_item_node->save();
+        } else {
+            \Drupal::logger('lending_library')->error('Presave: Could not load library item node @nid or it is not of type @type for transaction @tid.', ['@nid' => $library_item_node_id, '@type' => LENDING_LIBRARY_ITEM_NODE_TYPE, '@tid' => $transaction_entity->id()]);
+        }
+    }
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function lending_library_entity_view(array &$build, EntityInterface $entity, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+    if ($entity->getEntityTypeId() === 'node' && $entity->bundle() === LENDING_LIBRARY_ITEM_NODE_TYPE && $view_mode === 'full') {
+        
+        $current_user = \Drupal::currentUser();
+        $library_item_node = $entity;
+        $item_details = _lending_library_get_item_details($library_item_node);
+        
+        // --- FEATURE: Display the current status of the tool ---
+        if ($item_details) {
+            // Add a CSS class based on the status for styling.
+            $status_class = 'status-' . preg_replace('/[^a-z0-9\-]+/', '-', strtolower($item_details['status']));
+            $status_markup = '<div class="lending-library-status ' . $status_class . '">';
+            $status_markup .= '<strong>' . t('Status:') . '</strong> ' . ucfirst($item_details['status']);
+
+            if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid']) {
+                // Only show borrower info to logged-in users.
+                if (!$current_user->isAnonymous()) {
+                    $borrower_account = User::load($item_details['borrower_uid']);
+                    if ($borrower_account) {
+                        $borrower_link = Link::fromTextAndUrl($borrower_account->getDisplayName(), $borrower_account->toUrl())->toString();
+                        $status_markup .= ' ' . t('by @username', ['@username' => $borrower_link]);
+
+                        // Get loan details from the latest transaction.
+                        $loan_details = _lending_library_get_current_loan_details($library_item_node);
+                        if ($loan_details) {
+                            $date_formatter = \Drupal::service('date.formatter');
+                            if (!empty($loan_details['borrow_date'])) {
+                                $status_markup .= '<br/><strong>' . t('Borrowed:') . '</strong> ' . $date_formatter->format($loan_details['borrow_date']->getTimestamp(), 'short');
+                            }
+                            if (!empty($loan_details['due_date'])) {
+                                $status_markup .= '<br/><strong>' . t('Due:') . '</strong> ' . $date_formatter->format($loan_details['due_date']->getTimestamp(), 'short');
+                            }
+                        }
+                    }
+                }
+            }
+            $status_markup .= '</div>';
+            $build['lending_library_status'] = [
+                '#markup' => $status_markup,
+                '#weight' => -10,
+            ];
+        }
+
+        // --- FIX: Check for 'borrower' role before showing action links ---
+        if (!$current_user->hasRole('borrower')) {
+            return;
+        }
+
+        $links = [];
+        if ($item_details) {
+            if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
+                $url = Url::fromRoute('lending_library.withdraw_form', ['node' => $library_item_node->id()]);
+                $links['withdraw'] = ['#type' => 'link', '#title' => t('Withdraw This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
+            }
+            if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] == $current_user->id()) {
+                $url = Url::fromRoute('lending_library.return_form', ['node' => $library_item_node->id()]);
+                $links['return'] = ['#type' => 'link', '#title' => t('Return This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
+            }
+            if ($item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_RETIRED) {
+                $url = Url::fromRoute('lending_library.damage_form', ['node' => $library_item_node->id()]);
+                $links['report_damage'] = ['#type' => 'link', '#title' => t('Report Damage/Issue'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--warning', 'lending-library-button']]];
+            }
+        }
+        if (!empty($links)) {
+            $build['lending_library_actions'] = [
+                '#type' => 'container',
+                '#attributes' => ['class' => ['lending-library-action-buttons']],
+                '#weight' => 100,
+                'actions' => $links,
+                '#prefix' => '<div class="lending-library-actions-wrapper">',
+                '#suffix' => '</div>',
+            ];
+            $build['#attached']['library'][] = 'lending_library/lending_library.actions';
+        }
+    }
+}
+
+/**
+ * Implements hook_library_info_build().
+ */
+function lending_library_library_info_build() {
+    $libraries['lending_library.actions'] = [
+        'css' => [
+            'theme' => [
+                'css/lending_library_actions.css' => [],
+                'css/lending_library.css' => [],
+            ],
+        ],
+    ];
+    return $libraries;
+}

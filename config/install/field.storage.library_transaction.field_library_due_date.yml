@@ -1,0 +1,24 @@
+uuid: cd07b0e2-7926-4c1c-97d5-b16755f50884
+langcode: en
+status: true
+dependencies:
+  module:
+    - datetime
+    - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: library_transaction.field_library_due_date
+field_name: field_library_due_date
+entity_type: library_transaction
+type: datetime
+settings:
+  datetime_type: date
+module: datetime
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

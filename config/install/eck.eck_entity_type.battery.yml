@@ -1,0 +1,10 @@
+uuid: 46b9e6fb-6637-4a25-9bbc-d28457ace042
+langcode: en
+status: false
+dependencies: {  }
+id: battery
+label: Battery
+uid: false
+created: true
+changed: false
+title: false

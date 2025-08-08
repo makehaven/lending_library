@@ -1,0 +1,30 @@
+uuid: be930c06-1d26-453c-9206-5de6058768ee
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - options
+id: library_transaction.field_library_action
+field_name: field_library_action
+entity_type: library_transaction
+type: list_string
+settings:
+  allowed_values:
+    -
+      value: withdraw
+      label: Withdraw
+    -
+      value: return
+      label: Return
+    -
+      value: damage
+      label: Damage
+  allowed_values_function: ''
+module: options
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

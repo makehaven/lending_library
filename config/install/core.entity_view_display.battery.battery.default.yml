@@ -1,0 +1,44 @@
+uuid: a57cda8b-fa7b-475c-b053-3569002591f1
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.field.battery.battery.field_battery_number
+id: battery.battery.default
+targetEntityType: battery
+bundle: battery
+mode: default
+content:
+  created:
+    type: timestamp
+    label: hidden
+    settings:
+      date_format: medium
+      custom_date_format: ''
+      timezone: ''
+      tooltip:
+        date_format: long
+        custom_date_format: ''
+      time_diff:
+        enabled: false
+        future_format: '@interval hence'
+        past_format: '@interval ago'
+        granularity: 2
+        refresh: 60
+    third_party_settings: {  }
+    weight: 0
+    region: content
+  field_battery_number:
+    type: number_integer
+    label: above
+    settings:
+      thousand_separator: ''
+      prefix_suffix: true
+    third_party_settings: {  }
+    weight: 1
+    region: content
+hidden:
+  breadcrumbs: true
+  search_api_excerpt: true
+  uuid: true

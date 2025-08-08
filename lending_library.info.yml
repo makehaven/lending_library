@@ -1,0 +1,17 @@
+name: Lending Library
+type: module
+description: 'Manages tool lending, transactions, and associated item statuses.' # Updated description
+core_version_requirement: ^10
+package: Custom
+dependencies:
+  - drupal:eck # For Entity Construction Kit
+  - drupal:node # For the 'library_item' content type
+  - drupal:field # Core field API (good practice, though often implicitly required)
+  - drupal:text # For text fields (plain, formatted, long)
+  - drupal:options # For list (text) fields (e.g., status, action, inspection_issues) and boolean fields
+  - drupal:datetime # For date fields (borrow_date, due_date, return_date)
+  - drupal:image # For image fields (inspect_img, return_inspect_img)
+  - drupal:taxonomy # If field_library_item_category or other taxonomy refs are used
+  - drupal:file # If field_library_item_documents is a file field
+  - drupal:link # If field_library_item_manual or field_library_item_resource are link fields
+  - drupal:user # For entity reference fields to users (e.g., borrower fields)

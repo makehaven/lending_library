@@ -1,0 +1,20 @@
+uuid: ae63908b-13f5-4d9c-9c2f-d8297a9cb017
+langcode: en
+status: true
+dependencies:
+  module:
+    - datetime
+    - eck
+id: library_transaction.field_library_return_date
+field_name: field_library_return_date
+entity_type: library_transaction
+type: datetime
+settings:
+  datetime_type: date
+module: datetime
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

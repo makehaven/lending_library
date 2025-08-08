@@ -1,0 +1,10 @@
+uuid: 1998a3bf-f277-437f-aff4-3d24663e127d
+langcode: en
+status: false
+dependencies: {  }
+id: library_transaction
+label: 'Library Transaction'
+uid: true
+created: true
+changed: true
+title: false

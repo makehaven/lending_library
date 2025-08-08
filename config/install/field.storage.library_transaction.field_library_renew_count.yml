@@ -1,0 +1,20 @@
+uuid: dd5a331d-6733-49e5-a9bf-4697da951b64
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+id: library_transaction.field_library_renew_count
+field_name: field_library_renew_count
+entity_type: library_transaction
+type: integer
+settings:
+  unsigned: false
+  size: normal
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

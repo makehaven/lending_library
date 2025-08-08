@@ -1,0 +1,109 @@
+uuid: e4a28254-aa89-48c3-b99c-c1518d0cce3b
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.field.library_transaction.library_transaction.field_library_action
+    - field.field.library_transaction.library_transaction.field_library_borrow_batteries
+    - field.field.library_transaction.library_transaction.field_library_borrow_date
+    - field.field.library_transaction.library_transaction.field_library_borrow_inspect_img
+    - field.field.library_transaction.library_transaction.field_library_borrower
+    - field.field.library_transaction.library_transaction.field_library_charges_status
+    - field.field.library_transaction.library_transaction.field_library_due_date
+    - field.field.library_transaction.library_transaction.field_library_inspection_issues
+    - field.field.library_transaction.library_transaction.field_library_inspection_notes
+    - field.field.library_transaction.library_transaction.field_library_item
+    - field.field.library_transaction.library_transaction.field_library_renew_count
+    - field.field.library_transaction.library_transaction.field_library_return_date
+    - field.field.library_transaction.library_transaction.field_library_return_inspect_img
+    - image.style.thumbnail
+  module:
+    - datetime
+    - image
+id: library_transaction.library_transaction.default
+targetEntityType: library_transaction
+bundle: library_transaction
+mode: default
+content:
+  field_library_action:
+    type: options_buttons
+    weight: 1
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_library_borrow_batteries:
+    type: entity_reference_autocomplete
+    weight: 3
+    region: content
+    settings:
+      match_operator: STARTS_WITH
+      match_limit: 10
+      size: 60
+      placeholder: ''
+    third_party_settings: {  }
+  field_library_borrow_inspect_img:
+    type: image_image
+    weight: 4
+    region: content
+    settings:
+      progress_indicator: throbber
+      preview_image_style: thumbnail
+    third_party_settings: {  }
+  field_library_borrower:
+    type: entity_reference_autocomplete
+    weight: 0
+    region: content
+    settings:
+      match_operator: CONTAINS
+      match_limit: 10
+      size: 60
+      placeholder: ''
+    third_party_settings: {  }
+  field_library_charges_status:
+    type: options_select
+    weight: 9
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_library_due_date:
+    type: datetime_default
+    weight: 2
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_library_inspection_issues:
+    type: options_select
+    weight: 7
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_library_inspection_notes:
+    type: string_textarea
+    weight: 8
+    region: content
+    settings:
+      rows: 5
+      placeholder: ''
+    third_party_settings: {  }
+  field_library_return_date:
+    type: datetime_default
+    weight: 6
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_library_return_inspect_img:
+    type: image_image
+    weight: 5
+    region: content
+    settings:
+      progress_indicator: throbber
+      preview_image_style: thumbnail
+    third_party_settings: {  }
+hidden:
+  created: true
+  field_library_borrow_date: true
+  field_library_item: true
+  field_library_renew_count: true
+  uid: true
+  uuid: true
