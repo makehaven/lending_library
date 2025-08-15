@@ -1,0 +1,19 @@
+uuid: 34391381-a174-461a-ab34-27ff36ba79d2
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+id: library_transaction.field_library_borrow_batteries
+field_name: field_library_borrow_batteries
+entity_type: library_transaction
+type: entity_reference
+settings:
+  target_type: battery
+module: core
+locked: false
+cardinality: -1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

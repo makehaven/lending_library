@@ -1,0 +1,29 @@
+uuid: fb6ea6a4-d747-469f-b309-2dfc68abefc9
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_borrow_batteries
+id: library_transaction.library_transaction.field_library_borrow_batteries
+field_name: field_library_borrow_batteries
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Library Borrow Batteries'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:battery'
+  handler_settings:
+    target_bundles:
+      battery: battery
+    sort:
+      field: _none
+      direction: ASC
+    auto_create: false
+    auto_create_bundle: ''
+field_type: entity_reference

@@ -1,0 +1,33 @@
+uuid: 536366f7-0838-4ac3-a99f-fcc240a13b81
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - options
+id: library_transaction.field_library_inspection_issues
+field_name: field_library_inspection_issues
+entity_type: library_transaction
+type: list_string
+settings:
+  allowed_values:
+    -
+      value: no_issues
+      label: 'No issues'
+    -
+      value: damage
+      label: Damage
+    -
+      value: missing
+      label: Missing
+    -
+      value: other
+      label: Other
+  allowed_values_function: ''
+module: options
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

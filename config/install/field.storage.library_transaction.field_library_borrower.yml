@@ -1,0 +1,24 @@
+uuid: 11f0bd89-472d-4785-afaf-e691f1fbec1e
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+    - user
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: library_transaction.field_library_borrower
+field_name: field_library_borrower
+entity_type: library_transaction
+type: entity_reference
+settings:
+  target_type: user
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

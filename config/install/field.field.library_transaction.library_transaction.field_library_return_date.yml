@@ -1,0 +1,21 @@
+uuid: e4dbded6-c7a6-4792-ab06-6a9b2b3f0751
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_return_date
+  module:
+    - datetime
+id: library_transaction.library_transaction.field_library_return_date
+field_name: field_library_return_date
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Library Return date '
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: datetime

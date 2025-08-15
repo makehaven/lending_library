@@ -1,0 +1,27 @@
+uuid: 9e1fd78d-a74a-495c-8cb8-f951414af8a2
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.field.battery.battery.field_battery_number
+id: battery.battery.default
+targetEntityType: battery
+bundle: battery
+mode: default
+content:
+  created:
+    type: datetime_timestamp
+    weight: 10
+    region: content
+    settings: {  }
+    third_party_settings: {  }
+  field_battery_number:
+    type: number
+    weight: 11
+    region: content
+    settings:
+      placeholder: ''
+    third_party_settings: {  }
+hidden:
+  uuid: true

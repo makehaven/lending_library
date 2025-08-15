@@ -1,0 +1,21 @@
+uuid: f588bea0-17b0-479a-b2e5-8d8ed17b7300
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_inspection_issues
+  module:
+    - options
+id: library_transaction.library_transaction.field_library_inspection_issues
+field_name: field_library_inspection_issues
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Library Inspection issues '
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: list_string

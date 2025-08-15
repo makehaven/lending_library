@@ -1,0 +1,23 @@
+uuid: 32a7be59-8a05-462e-9276-095255b48ef2
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_renew_count
+id: library_transaction.library_transaction.field_library_renew_count
+field_name: field_library_renew_count
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Library Renew count'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  min: null
+  max: null
+  prefix: ''
+  suffix: ''
+field_type: integer

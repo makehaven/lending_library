@@ -1,0 +1,41 @@
+lending_library.withdraw_form:
+  path: '/library-item/{node}/withdraw'
+  defaults:
+    _title: 'Withdraw Item'
+    _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
+    action_type: 'withdraw'
+  requirements:
+    _permission: 'create library_transaction entities' 
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: entity:node
+
+lending_library.return_form:
+  path: '/library-item/{node}/return'
+  defaults:
+    _title: 'Return Item'
+    _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
+    action_type: 'return'
+  requirements:
+    _permission: 'create library_transaction entities' 
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: entity:node
+
+lending_library.issue_form:
+  path: '/library-item/{node}/report-issue' 
+  defaults:
+    _title: 'Report Issue' 
+    _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
+    action_type: 'issue' 
+  requirements:
+    _permission: 'create library_transaction entities'
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: entity:node

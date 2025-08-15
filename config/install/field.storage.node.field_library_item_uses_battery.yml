@@ -1,0 +1,18 @@
+uuid: 7d07168f-dc23-4c5d-992a-ec8e6c562b19
+langcode: en
+status: true
+dependencies:
+  module:
+    - node
+id: node.field_library_item_uses_battery
+field_name: field_library_item_uses_battery
+entity_type: node
+type: boolean
+settings: {  }
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

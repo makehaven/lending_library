@@ -1,0 +1,30 @@
+uuid: 712ed247-561e-4c3c-ada7-e47fa9c5eaa3
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - file
+    - image
+id: library_transaction.field_library_return_inspect_img
+field_name: field_library_return_inspect_img
+entity_type: library_transaction
+type: image
+settings:
+  target_type: file
+  display_field: false
+  display_default: true
+  uri_scheme: public
+  default_image:
+    uuid: ''
+    alt: ''
+    title: ''
+    width: null
+    height: null
+module: image
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false
