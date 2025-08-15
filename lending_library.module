@@ -421,7 +421,7 @@ function _lending_library_transaction_form_validate(&$form, FormStateInterface $
 }
 
 /**
- * Our submit handler (overrides ECK default so our redirect always applies)
+ * Our submit handler (overrides ECK default so our redirect always applies).
  */
 function _lending_library_transaction_form_submit(array &$form, FormStateInterface $form_state) {
   $transaction_entity = $form_state->getFormObject()->getEntity();
