@@ -3,14 +3,14 @@ lending_library.withdraw_form:
   defaults:
     _title: 'Withdraw Item'
     _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
-    action_type: 'withdraw' # Pass the action type as a parameter
+    action_type: 'withdraw'
   requirements:
-    _permission: 'access content' # Or a more specific permission
-    node: \d+ # Ensure 'node' is a number (node ID)
+    _permission: 'create library_transaction entities' 
+    node: \d+
   options:
     parameters:
       node:
-        type: entity:node # Ensures the {node} is upcasted to a Node object
+        type: entity:node
 
 lending_library.return_form:
   path: '/library-item/{node}/return'
@@ -19,25 +19,23 @@ lending_library.return_form:
     _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
     action_type: 'return'
   requirements:
-    _permission: 'access content'
+    _permission: 'create library_transaction entities' 
     node: \d+
   options:
     parameters:
       node:
         type: entity:node
 
-lending_library.damage_form:
-  path: '/library-item/{node}/report-damage'
+lending_library.issue_form:
+  path: '/library-item/{node}/report-issue' 
   defaults:
-    _title: 'Report Damage/Issue'
+    _title: 'Report Issue' 
     _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
-    action_type: 'damage'
+    action_type: 'issue' 
   requirements:
-    _permission: 'access content'
+    _permission: 'create library_transaction entities'
     node: \d+
   options:
     parameters:
       node:
         type: entity:node
-
-# Add more routes for other actions if needed (e.g., renew)
