@@ -39,3 +39,21 @@ lending_library.issue_form:
     parameters:
       node:
         type: entity:node
+
+lending_library.settings:
+  path: '/admin/config/makehaven/lending-library'
+  defaults:
+    _form: '\Drupal\lending_library\Form\LendingLibrarySettingsForm'
+    _title: 'Lending Library settings'
+  requirements:
+    _permission: 'administer site configuration'
+
+
+lending_library.battery_return:
+  path: '/library/battery/{battery}/return'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\BatteryReturnController::return'
+    _title: 'Return Battery'
+  requirements:
+    _permission: 'create library_transaction entities'
+    battery: '\d+'

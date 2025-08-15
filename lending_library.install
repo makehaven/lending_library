@@ -1,0 +1,20 @@
+<?php
+
+/**
+ * Set default config values if missing.
+ */
+function lending_library_update_9001() {
+  $config = \Drupal::configFactory()->getEditable('lending_library.settings');
+  $defaults = [
+    'loan_terms_html' => '<h4>Loan Terms</h4><ul><li><strong>Due Date:</strong> N/A – calculated on checkout.</li><li>All tools must be returned within seven (7) days. Late fees apply.</li><li>Handle tools responsibly; you are liable for damage or loss.</li></ul><p>See the enrollment form for full rules.</p>',
+    'email_checkout_footer' => 'Please treat our tools with care. — MakeHaven Team',
+    'email_return_body' => 'Thanks — your return has been recorded.',
+    'email_issue_notice_intro' => 'A member submitted an issue report.',
+  ];
+  foreach ($defaults as $k => $v) {
+    if ($config->get($k) === NULL) {
+      $config->set($k, $v);
+    }
+  }
+  $config->save();
+}

@@ -1,0 +1,12 @@
+lending_library.actions:
+  css:
+    theme:
+      css/lending_library_actions.css: {}
+      css/lending_library.css: {}
+
+lending_library.battery_limit:
+  js:
+    js/battery_limit.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

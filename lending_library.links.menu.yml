@@ -1,0 +1,6 @@
+lending_library.settings:
+  title: 'Lending Library'
+  description: 'Configure Loan Terms and email messages.'
+  route_name: lending_library.settings
+  parent: system.admin_config_services
+  weight: 100
