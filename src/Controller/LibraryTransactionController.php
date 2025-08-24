@@ -61,8 +61,12 @@ class LibraryTransactionController extends ControllerBase {
 
     // Corresponds to LENDING_LIBRARY_ACTION_WITHDRAW
     if ($action_type === 'withdraw') {
+      $config = $this->config('lending_library.settings');
+      $loan_days = $config->get('loan_period_days') ?: 7;
+
       $today_datetime = new DrupalDateTime('now');
-      $due_datetime = new DrupalDateTime('+7 days');
+      $due_datetime = new DrupalDateTime('now');
+      $due_datetime->modify("+$loan_days days");
       $date_format = 'Y-m-d';
 
       // Corresponds to LENDING_LIBRARY_TRANSACTION_BORROW_DATE_FIELD

@@ -424,14 +424,23 @@ $terms_html = \Drupal::config('lending_library.settings')->get('loan_terms_html'
 if (empty($terms_html)) {
   // Safe fallback if config is empty or not installed yet.
   $terms_html = '<h4>Loan Terms</h4><ul>'
-    . '<li><strong>Due Date:</strong> ' . $due_date_display . '</li>'
+    . '<li><strong>Due Date:</strong> [due_date]</li>'
     . '<li>All tools must be returned within seven (7) days. Late fees apply.</li>'
     . '</ul>';
 }
 
+$replacement_value = $item_details['replacement_value'] ?? 0;
+$replacements = [
+  '[due_date]' => $due_date_display,
+  '[replacement_value]' => number_format($replacement_value, 2),
+  '[replacement_value_150]' => number_format($replacement_value * 1.5, 2),
+];
+
+$processed_terms = str_replace(array_keys($replacements), array_values($replacements), $terms_html);
+
 $form['lending_library_agreement_text'] = [
   '#type' => 'markup',
-  '#markup' => '<div class="lending-library-agreement">' . $terms_html . '</div>',
+  '#markup' => '<div class="lending-library-agreement">' . $processed_terms . '</div>',
   '#weight' => 50,
 ];
 
@@ -534,15 +543,43 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
       break;
 
       case LENDING_LIBRARY_ACTION_RETURN:
+        $borrower_uid = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->target_id ?: \Drupal::currentUser()->id();
+        $charge_applied = FALSE;
+
+        // Check if the return is overdue and charge for unreturned batteries if so.
+        $now = new DrupalDateTime('now');
+        $t_query = \Drupal::entityQuery('library_transaction')
+            ->condition(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, $library_item_node->id())
+            ->condition(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD, $borrower_uid)
+            ->condition(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, 'withdraw')
+            ->sort('created', 'DESC')->range(0, 1)->accessCheck(FALSE);
+        $t_ids = $t_query->execute();
+        if (!empty($t_ids)) {
+            $withdraw_transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load(reset($t_ids));
+            $due_date = $withdraw_transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
+            if ($due_date < $now) { // Is overdue.
+                $unreturned_battery_charge = 0;
+                if (!$form_state->getValue('lending_library_return_batteries')) {
+                    $unreturned_battery_charge = _lending_library_calculate_unreturned_battery_value($withdraw_transaction);
+                }
+
+                if ($unreturned_battery_charge > 0) {
+                    $transaction_entity->set('field_library_charge_battery', $unreturned_battery_charge);
+                    if ($transaction_entity->hasField('field_field_library_amount_due')) {
+                      $transaction_entity->set('field_field_library_amount_due', $unreturned_battery_charge);
+                    } elseif ($transaction_entity->hasField('field_library_amount_due')) {
+                      $transaction_entity->set('field_library_amount_due', $unreturned_battery_charge);
+                    }
+                    _lending_library_send_email_by_key($transaction_entity, 'condition_charge', ['amount_due' => $unreturned_battery_charge]);
+                    $charge_applied = TRUE;
+                }
+            }
+        }
+
         \Drupal::messenger()->addStatus(t('@tool_name has been successfully returned. Thank you!', ['@tool_name' => $tool_name]));
   
         // If the checkbox exists and is checked, return associated batteries.
-        $return_bats = (bool) $form_state->getValue('lending_library_return_batteries');
-        if ($return_bats && $library_item_node instanceof \Drupal\node\NodeInterface) {
-          $borrower_uid = \Drupal::currentUser()->id();
-          if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->isEmpty()) {
-            $borrower_uid = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->target_id;
-          }
+        if ($form_state->getValue('lending_library_return_batteries') && $library_item_node instanceof \Drupal\node\NodeInterface) {
           $bats = _lending_library_load_borrowed_batteries($library_item_node->id(), $borrower_uid);
           if (!empty($bats)) {
             _lending_library_return_batteries($bats);
@@ -550,7 +587,9 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
           }
         }
   
-        _lending_library_send_return_email($transaction_entity);
+        if (!$charge_applied) {
+          _lending_library_send_return_email($transaction_entity);
+        }
         $form_state->setRedirectUrl(Url::fromUri('internal:/library'));
         break;
   
@@ -654,58 +693,22 @@ function lending_library_entity_insert(EntityInterface $entity) {
     // RETURN
     // ---------------------------
     case LENDING_LIBRARY_ACTION_RETURN:
-      // Update tool.
+      // Update tool status.
       $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE);
       $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
       $save_item_node = TRUE;
 
-      // Release any batteries tied to this borrower & item.
-      try {
-        $query = \Drupal::entityQuery('battery')->accessCheck(FALSE);
-
-        // Add conditions only if fields exist.
-        $defs = \Drupal::service('entity_field.manager')->getFieldDefinitions('battery', 'battery');
-        if (isset($defs[LENDING_LIBRARY_BATTERY_STATUS_FIELD])) {
-          $query->condition(LENDING_LIBRARY_BATTERY_STATUS_FIELD . '.value', LENDING_LIBRARY_BATTERY_STATUS_BORROWED);
-        }
-        if ($transaction_borrower_uid && isset($defs[LENDING_LIBRARY_BATTERY_BORROWER_FIELD])) {
-          $query->condition(LENDING_LIBRARY_BATTERY_BORROWER_FIELD, $transaction_borrower_uid);
-        }
-        if (isset($defs[LENDING_LIBRARY_BATTERY_CURRENT_ITEM_FIELD])) {
-          $query->condition(LENDING_LIBRARY_BATTERY_CURRENT_ITEM_FIELD, $library_item_node->id());
-        }
-
-        $ids = $query->execute();
-        if ($ids) {
-          $batteries = \Drupal::entityTypeManager()->getStorage('battery')->loadMultiple($ids);
-          foreach ($batteries as $battery) {
-            if ($battery->hasField(LENDING_LIBRARY_BATTERY_STATUS_FIELD)) {
-              $battery->set(LENDING_LIBRARY_BATTERY_STATUS_FIELD, LENDING_LIBRARY_BATTERY_STATUS_AVAILABLE);
-            }
-            if ($battery->hasField(LENDING_LIBRARY_BATTERY_BORROWER_FIELD)) {
-              $battery->set(LENDING_LIBRARY_BATTERY_BORROWER_FIELD, NULL);
-            }
-            if ($battery->hasField(LENDING_LIBRARY_BATTERY_CURRENT_ITEM_FIELD)) {
-              $battery->set(LENDING_LIBRARY_BATTERY_CURRENT_ITEM_FIELD, NULL);
-            }
-            _lending_library_battery_save_with_revision(
-              $battery,
-              t('Released on tool return for item @nid by user @uid.', [
-                '@nid' => $library_item_node->id(),
-                '@uid' => $transaction_borrower_uid,
-              ])
-            );
-            
-          }
-        }
+      // Ensure return date is set on the transaction.
+      if ($entity->hasField(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD) && $entity->get(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)->isEmpty()) {
+        $entity->set(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD, ['value' => (new DrupalDateTime('now'))->format('Y-m-d')]);
       }
-      catch (\Exception $e) {
-        \Drupal::logger('lending_library')->error('Error querying batteries to release: @msg', ['@msg' => $e->getMessage()]);
-      }
+
+      // Note: The logic to mark batteries as returned is in _lending_library_transaction_form_submit(),
+      // based on user input from the form. The previous broad logic here was a bug.
 
       // If you added a "closed" boolean on transactions, mark it.
       if ($entity->hasField('field_library_closed')) {
-        try { $entity->set('field_library_closed', 1)->save(); } catch (\Exception $ignore) {}
+        try { $entity->set('field_library_closed', 1); } catch (\Exception $ignore) {}
       }
       break;
 
@@ -735,7 +738,8 @@ function lending_library_entity_insert(EntityInterface $entity) {
 
       if ($new_status_based_on_issue) {
         $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, $new_status_based_on_issue);
-        if ($new_status_based_on_issue === LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
+        // If an item is no longer borrowed (available or in for repair), clear the borrower.
+        if (in_array($new_status_based_on_issue, [LENDING_LIBRARY_ITEM_STATUS_AVAILABLE, LENDING_LIBRARY_ITEM_STATUS_REPAIR])) {
           $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
         }
         $save_item_node = TRUE;
@@ -789,6 +793,200 @@ function lending_library_entity_insert(EntityInterface $entity) {
     }
   }
   
+}
+
+/**
+ * Implements hook_cron().
+ *
+ * Finds overdue items and sends notifications or applies charges.
+ */
+function lending_library_cron() {
+  $logger = \Drupal::logger('lending_library');
+  $logger->notice('Lending library cron job started.');
+
+  $now = new DrupalDateTime('now');
+  $config = \Drupal::config('lending_library.settings');
+
+  // Find all items that are currently borrowed or missing.
+  $query = \Drupal::entityQuery('node')
+    ->condition('type', LENDING_LIBRARY_ITEM_NODE_TYPE)
+    ->condition(LENDING_LIBRARY_ITEM_STATUS_FIELD, [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_MISSING], 'IN')
+    ->accessCheck(FALSE);
+  $item_ids = $query->execute();
+
+  if (empty($item_ids)) {
+    $logger->notice('Cron: No borrowed or missing items found.');
+    return;
+  }
+
+  $items = \Drupal::entityTypeManager()->getStorage('node')->loadMultiple($item_ids);
+
+  foreach ($items as $item) {
+    // Get the latest 'withdraw' transaction for this item to find the due date.
+    $t_query = \Drupal::entityQuery('library_transaction')
+      ->condition(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, $item->id())
+      ->condition(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, 'withdraw')
+      ->sort('created', 'DESC')
+      ->range(0, 1)
+      ->accessCheck(FALSE);
+    $t_ids = $t_query->execute();
+    if (empty($t_ids)) {
+      continue;
+    }
+    $transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load(reset($t_ids));
+
+    if ($transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
+      continue;
+    }
+
+    $due_date = $transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
+    if ($due_date > $now) {
+      continue; // Not overdue yet.
+    }
+
+    $days_overdue = $due_date->diff($now)->days;
+
+    // To prevent spamming, we need to track if notifications have been sent.
+    // We will add a field for this, but for now, we'll assume it doesn't exist and just send.
+    // A better implementation would check a custom field on the transaction entity.
+
+    if ($days_overdue >= 30) {
+      // To avoid processing multiple times, check a flag on the transaction.
+      // Let's assume a field `field_library_30day_processed` (boolean).
+      if ($transaction->hasField('field_library_30day_processed') && $transaction->get('field_library_30day_processed')->value) {
+        continue;
+      }
+      _lending_library_process_30_day_overdue($transaction);
+    }
+    else {
+      // To avoid spamming, check a flag.
+      // Let's assume a field `field_library_overdue_notified` (boolean).
+      if ($transaction->hasField('field_library_overdue_notified') && $transaction->get('field_library_overdue_notified')->value) {
+        continue;
+      }
+      _lending_library_send_overdue_email($transaction);
+    }
+  }
+
+  $logger->notice('Lending library cron job finished.');
+}
+
+/**
+ * Processes a transaction that is 30 days overdue.
+ */
+function _lending_library_process_30_day_overdue(EntityInterface $transaction) {
+  $item_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD);
+  if ($item_ref->isEmpty()) {
+    return;
+  }
+  $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($item_ref->target_id);
+  if (!$library_item_node) {
+    return;
+  }
+
+  $replacement_value = 0;
+  if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->isEmpty()) {
+    $replacement_value = $library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value;
+  }
+
+  $battery_charge = _lending_library_calculate_unreturned_battery_value($transaction);
+
+  $total_due = $replacement_value + $battery_charge;
+
+  if ($transaction->hasField('field_library_charge_replacement')) {
+    $transaction->set('field_library_charge_replacement', $replacement_value);
+  }
+  if ($transaction->hasField('field_library_charge_battery')) {
+    $transaction->set('field_library_charge_battery', $battery_charge);
+  }
+  // The user mentioned field_field_library_amount_due, which is likely a typo for field_library_amount_due.
+  if ($transaction->hasField('field_library_amount_due')) {
+      $transaction->set('field_library_amount_due', $total_due);
+  } else if ($transaction->hasField('field_field_library_amount_due')) {
+      $transaction->set('field_field_library_amount_due', $total_due);
+  }
+
+
+  // Flag as processed.
+  if ($transaction->hasField('field_library_30day_processed')) {
+    $transaction->set('field_library_30day_processed', 1);
+  }
+
+  $transaction->save();
+
+  // Send email
+  _lending_library_send_email_by_key($transaction, 'overdue_30_day', ['amount_due' => $total_due]);
+}
+
+/**
+ * Sends a generic overdue email.
+ */
+function _lending_library_send_overdue_email(EntityInterface $transaction) {
+  // Flag as notified.
+  if ($transaction->hasField('field_library_overdue_notified')) {
+    $transaction->set('field_library_overdue_notified', 1);
+    $transaction->save();
+  }
+  _lending_library_send_email_by_key($transaction, 'overdue');
+}
+
+/**
+ * Helper to send email based on a key.
+ */
+function _lending_library_send_email_by_key(EntityInterface $transaction, $key, $extra_params = []) {
+    $borrower_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD);
+    if ($borrower_ref->isEmpty()) return;
+    $borrower_user = User::load($borrower_ref->target_id);
+    if (!$borrower_user || !$borrower_user->getEmail()) return;
+
+    $item_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD);
+    if ($item_ref->isEmpty()) return;
+    $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($item_ref->target_id);
+    if (!$library_item_node) return;
+
+    $params = [
+        'tool_name' => $library_item_node->label(),
+        'borrower_name' => $borrower_user->getDisplayName(),
+    ] + $extra_params;
+
+    if (isset($params['amount_due'])) {
+      $item_name_encoded = urlencode($library_item_node->label() . ' - Overdue Charge');
+      $amount_encoded = urlencode($params['amount_due']);
+      $custom_encoded = urlencode('LendingLibrary');
+      $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business=payments%40makehaven.org&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
+    }
+
+    $from = \Drupal::config('system.site')->get('mail');
+    \Drupal::service('plugin.manager.mail')->mail(
+        'lending_library',
+        $key,
+        $borrower_user->getEmail(),
+        $borrower_user->getPreferredLangcode(),
+        $params,
+        $from,
+        TRUE
+    );
+}
+
+/**
+ * Calculates the value of unreturned batteries for a transaction.
+ */
+function _lending_library_calculate_unreturned_battery_value(EntityInterface $transaction) {
+    $borrowed_batteries_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD);
+    if ($borrowed_batteries_ref->isEmpty()) {
+        return 0;
+    }
+
+    $total_value = 0;
+    $borrowed_batteries = $borrowed_batteries_ref->referencedEntities();
+    foreach ($borrowed_batteries as $battery) {
+        // A battery is considered unreturned if it's still linked to the transaction.
+        // The return process should remove it from the transaction.
+        if ($battery->hasField('field_battery_value') && !$battery->get('field_battery_value')->isEmpty()) {
+            $total_value += $battery->get('field_battery_value')->value;
+        }
+    }
+    return $total_value;
 }
 
 
@@ -1091,6 +1289,15 @@ function lending_library_mail($key, &$message, $params) {
   $return_body     = $cfg->get('email_return_body') ?: '';
   $issue_intro     = $cfg->get('email_issue_notice_intro') ?: '';
 
+  // New templates
+  $overdue_subject = $cfg->get('email_overdue_subject') ?: 'Your borrowed tool is overdue';
+  $overdue_body = $cfg->get('email_overdue_body') ?: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is now overdue. Please return it as soon as possible.";
+  $overdue_30_day_subject = $cfg->get('email_overdue_30_day_subject') ?: 'Charge for unreturned library tool';
+  $overdue_30_day_body = $cfg->get('email_overdue_30_day_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' is now 30 days overdue. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]";
+  $condition_charge_subject = $cfg->get('email_condition_charge_subject') ?: 'Charge for tool damage or missing parts';
+  $condition_charge_body = $cfg->get('email_condition_charge_body') ?: "Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]";
+
+
   switch ($key) {
     case 'checkout_confirmation': {
       $tool = $params['tool_name'] ?? t('Unknown tool');
@@ -1178,6 +1385,30 @@ function lending_library_mail($key, &$message, $params) {
       $message['body'][] = implode("\n", $lines);
       break;
     }
+
+    case 'overdue':
+    case 'overdue_30_day':
+    case 'condition_charge':
+        $replacements = [
+            '[tool_name]' => $params['tool_name'] ?? '',
+            '[borrower_name]' => $params['borrower_name'] ?? '',
+            '[amount_due]' => isset($params['amount_due']) ? number_format($params['amount_due'], 2) : '',
+            '[payment_link]' => $params['payment_link'] ?? '',
+        ];
+
+        if ($key === 'overdue') {
+            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_subject);
+            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_body);
+        }
+        elseif ($key === 'overdue_30_day') {
+            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_30_day_subject);
+            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_30_day_body);
+        }
+        else { // condition_charge
+            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $condition_charge_subject);
+            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $condition_charge_body);
+        }
+        break;
   }
 }
 
