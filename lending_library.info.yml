@@ -1,7 +1,7 @@
 name: Lending Library
 type: module
 description: 'Manages tool lending, transactions, and associated item statuses.' # Updated description
-core_version_requirement: ^10
+core_version_requirement: ^10 || ^11
 package: Custom
 dependencies:
   - drupal:eck # For Entity Construction Kit
