@@ -144,20 +144,21 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
 
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('lending_library.settings');
-    $values = $form_state->getValues();
 
+    // Get values from the form state. Since we are not using #tree => TRUE,
+    // the values are at the top level of the form state values array.
     $config
-      ->set('loan_period_days', $values['loan_settings']['loan_period_days'])
-      ->set('loan_terms_html', $values['loan_settings']['loan_terms_html'])
-      ->set('email_checkout_footer', $values['email_settings']['email_checkout_footer'])
-      ->set('email_return_body', $values['email_settings']['email_return_body'])
-      ->set('email_issue_notice_intro', $values['email_settings']['email_issue_notice_intro'])
-      ->set('email_overdue_subject', $values['email_settings']['overdue']['email_overdue_subject'])
-      ->set('email_overdue_body', $values['email_settings']['overdue']['email_overdue_body'])
-      ->set('email_overdue_30_day_subject', $values['email_settings']['overdue_30_day']['email_overdue_30_day_subject'])
-      ->set('email_overdue_30_day_body', $values['email_settings']['overdue_30_day']['email_overdue_30_day_body'])
-      ->set('email_condition_charge_subject', $values['email_settings']['condition_charge']['email_condition_charge_subject'])
-      ->set('email_condition_charge_body', $values['email_settings']['condition_charge']['email_condition_charge_body'])
+      ->set('loan_period_days', $form_state->getValue('loan_period_days'))
+      ->set('loan_terms_html', $form_state->getValue('loan_terms_html'))
+      ->set('email_checkout_footer', $form_state->getValue('email_checkout_footer'))
+      ->set('email_return_body', $form_state->getValue('email_return_body'))
+      ->set('email_issue_notice_intro', $form_state->getValue('email_issue_notice_intro'))
+      ->set('email_overdue_subject', $form_state->getValue('email_overdue_subject'))
+      ->set('email_overdue_body', $form_state->getValue('email_overdue_body'))
+      ->set('email_overdue_30_day_subject', $form_state->getValue('email_overdue_30_day_subject'))
+      ->set('email_overdue_30_day_body', $form_state->getValue('email_overdue_30_day_body'))
+      ->set('email_condition_charge_subject', $form_state->getValue('email_condition_charge_subject'))
+      ->set('email_condition_charge_body', $form_state->getValue('email_condition_charge_body'))
       ->save();
 
     parent::submitForm($form, $form_state);

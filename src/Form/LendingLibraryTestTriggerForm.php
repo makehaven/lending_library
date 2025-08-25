@@ -50,7 +50,7 @@ class LendingLibraryTestTriggerForm extends FormBase {
       '#type' => 'entity_autocomplete',
       '#title' => $this->t('Library Transaction'),
       '#target_type' => 'library_transaction',
-      '#description' => $this->t('Select the "withdraw" transaction you want to test.'),
+      '#description' => $this->t('Start typing the transaction ID to search for a transaction. You should select the original "withdraw" transaction for the loan you wish to test. You can find a list of all transactions at /admin/content/library-transactions.'),
       '#required' => TRUE,
     ];
 
