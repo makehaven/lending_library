@@ -83,7 +83,9 @@ class BatteryReturnConfirmForm extends ConfirmFormBase {
       }
     }
 
-    $this->messenger()->addStatus($this->t('Battery %label has been returned.', ['%label' => $this->battery->label()]));
+    $config = $this->config('lending_library.settings');
+    $message = $config->get('battery_return_message') ?: $this->t('Battery %label has been returned.', ['%label' => $this->battery->label()]);
+    $this->messenger()->addStatus($message);
     $form_state->setRedirectUrl($this->getCancelUrl());
   }
 

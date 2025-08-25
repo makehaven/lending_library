@@ -139,6 +139,14 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#rows' => 5,
     ];
 
+    $form['battery_return_message'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Battery return confirmation message'),
+      '#description' => $this->t('This message is shown to the user after they return a battery individually.'),
+      '#default_value' => $config->get('battery_return_message') ?: $this->t('Battery has been marked as returned.'),
+      '#rows' => 3,
+    ];
+
     return parent::buildForm($form, $form_state);
   }
 
@@ -159,6 +167,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       ->set('email_overdue_30_day_body', $form_state->getValue('email_overdue_30_day_body'))
       ->set('email_condition_charge_subject', $form_state->getValue('email_condition_charge_subject'))
       ->set('email_condition_charge_body', $form_state->getValue('email_condition_charge_body'))
+      ->set('battery_return_message', $form_state->getValue('battery_return_message'))
       ->save();
 
     parent::submitForm($form, $form_state);

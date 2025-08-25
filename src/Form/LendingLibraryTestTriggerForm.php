@@ -46,12 +46,15 @@ class LendingLibraryTestTriggerForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    $transaction_list_url = \Drupal\Core\Url::fromUri('internal:/admin/content/library_transaction')->toString();
+    $link = '<a href="' . $transaction_list_url . '" target="_blank">Find Transactions</a>';
+
     $form['transaction_id'] = [
-      '#type' => 'entity_autocomplete',
-      '#title' => $this->t('Library Transaction'),
-      '#target_type' => 'library_transaction',
-      '#description' => $this->t('Start typing the transaction ID to search for a transaction. You should select the original "withdraw" transaction for the loan you wish to test. You can find a list of all transactions at /admin/content/library-transactions.'),
+      '#type' => 'number',
+      '#title' => $this->t('Library Transaction ID'),
+      '#description' => $this->t('Enter the ID of the "withdraw" transaction you want to test. (@link)', ['@link' => $link]),
       '#required' => TRUE,
+      '#min' => 1,
     ];
 
     $form['actions'] = [
