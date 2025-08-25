@@ -48,6 +48,14 @@ lending_library.settings:
   requirements:
     _permission: 'administer site configuration'
 
+lending_library.test_form:
+  path: '/admin/config/makehaven/lending-library/test'
+  defaults:
+    _form: '\Drupal\lending_library\Form\LendingLibraryTestTriggerForm'
+    _title: 'Test Triggers'
+  requirements:
+    _permission: 'administer site configuration'
+
 
 lending_library.battery_return:
   path: '/library/battery/{battery}/return'

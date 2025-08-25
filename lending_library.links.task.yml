@@ -1,0 +1,9 @@
+lending_library.settings_tab:
+  route_name: lending_library.settings
+  title: 'Settings'
+  base_route: lending_library.settings
+
+lending_library.test_form_tab:
+  route_name: lending_library.test_form
+  title: 'Test Triggers'
+  base_route: lending_library.settings

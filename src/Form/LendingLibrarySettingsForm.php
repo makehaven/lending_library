@@ -19,8 +19,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     $config = $this->config('lending_library.settings');
 
     $form['loan_settings'] = [
-      '#type' => 'fieldset',
+      '#type' => 'details',
       '#title' => $this->t('Loan Settings'),
+      '#open' => TRUE,
     ];
 
     $form['loan_settings']['loan_period_days'] = [
@@ -42,7 +43,6 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     $form['replacement_patterns'] = [
       '#type' => 'details',
       '#title' => $this->t('Available Replacement Patterns'),
-      '#description' => $this->t('You can use these patterns in the loan terms and email templates. They will be replaced with the actual values when displayed to the user.'),
     ];
     $items = [
       $this->t('<code>[due_date]</code>: The calculated due date for the loan.'),
@@ -58,13 +58,13 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#items' => $items,
     ];
 
-
-    $form['email_templates'] = [
-      '#type' => 'fieldset',
+    $form['email_settings'] = [
+      '#type' => 'details',
       '#title' => $this->t('Email Templates'),
+      '#open' => TRUE,
     ];
 
-    $form['email_templates']['email_checkout_footer'] = [
+    $form['email_settings']['email_checkout_footer'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Checkout email footer'),
       '#description' => $this->t('Appended to the bottom of the checkout confirmation email. Plain text or basic HTML.'),
@@ -72,7 +72,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#rows' => 3,
     ];
 
-    $form['email_templates']['email_return_body'] = [
+    $form['email_settings']['email_return_body'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Return email body'),
       '#description' => $this->t('Inserted into the return confirmation email. Plain text or basic HTML.'),
@@ -80,7 +80,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#rows' => 3,
     ];
 
-    $form['email_templates']['email_issue_notice_intro'] = [
+    $form['email_settings']['email_issue_notice_intro'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Issue notice intro (staff email)'),
       '#description' => $this->t('First line(s) of the issue notification email sent to staff. Plain text or basic HTML.'),
@@ -88,87 +88,77 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#rows' => 3,
     ];
 
-    $form['email_templates']['overdue'] = [
+    $form['email_settings']['overdue'] = [
       '#type' => 'details',
       '#title' => $this->t('Overdue Notification'),
-      '#open' => TRUE,
+      '#group' => 'email_settings',
     ];
-    $form['email_templates']['overdue']['email_overdue_subject'] = [
+    $form['email_settings']['overdue']['email_overdue_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_overdue_subject') ?: $this->t('Your borrowed tool is overdue'),
     ];
-    $form['email_templates']['overdue']['email_overdue_body'] = [
+    $form['email_settings']['overdue']['email_overdue_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_overdue_body') ?: $this->t("Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is now overdue. Please return it as soon as possible."),
         '#rows' => 5,
     ];
 
-    $form['email_templates']['overdue_30_day'] = [
+    $form['email_settings']['overdue_30_day'] = [
         '#type' => 'details',
         '#title' => $this->t('30-Day Overdue Notification (with charge)'),
-        '#open' => TRUE,
+        '#group' => 'email_settings',
     ];
-    $form['email_templates']['overdue_30_day']['email_overdue_30_day_subject'] = [
+    $form['email_settings']['overdue_30_day']['email_overdue_30_day_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_overdue_30_day_subject') ?: $this->t('Charge for unreturned library tool'),
     ];
-    $form['email_templates']['overdue_30_day']['email_overdue_30_day_body'] = [
+    $form['email_settings']['overdue_30_day']['email_overdue_30_day_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_overdue_30_day_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' is now 30 days overdue. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]"),
         '#rows' => 5,
     ];
 
-    $form['email_templates']['condition_charge'] = [
+    $form['email_settings']['condition_charge'] = [
         '#type' => 'details',
         '#title' => $this->t('Condition Charge Notification'),
-        '#open' => TRUE,
+        '#group' => 'email_settings',
     ];
-    $form['email_templates']['condition_charge']['email_condition_charge_subject'] = [
+    $form['email_settings']['condition_charge']['email_condition_charge_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_condition_charge_subject') ?: $this->t('Charge for tool damage or missing parts'),
     ];
-    $form['email_templates']['condition_charge']['email_condition_charge_body'] = [
+    $form['email_settings']['condition_charge']['email_condition_charge_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_condition_charge_body') ?: $this->t("Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]"),
         '#rows' => 5,
     ];
 
-
     return parent::buildForm($form, $form_state);
   }
 
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $editable_config = $this->configFactory()->getEditable('lending_library.settings');
+    $config = $this->config('lending_library.settings');
+    $values = $form_state->getValues();
 
-    // Loan settings
-    $editable_config->set('loan_period_days', $form_state->getValue(['loan_settings', 'loan_period_days']));
-    $editable_config->set('loan_terms_html', $form_state->getValue(['loan_settings', 'loan_terms_html']));
-
-    // Email templates
-    $editable_config->set('email_checkout_footer', $form_state->getValue(['email_templates', 'email_checkout_footer']));
-    $editable_config->set('email_return_body', $form_state->getValue(['email_templates', 'email_return_body']));
-    $editable_config->set('email_issue_notice_intro', $form_state->getValue(['email_templates', 'email_issue_notice_intro']));
-
-    // Overdue email
-    $editable_config->set('email_overdue_subject', $form_state->getValue(['email_templates', 'overdue', 'email_overdue_subject']));
-    $editable_config->set('email_overdue_body', $form_state->getValue(['email_templates', 'overdue', 'email_overdue_body']));
-
-    // 30-day overdue email
-    $editable_config->set('email_overdue_30_day_subject', $form_state->getValue(['email_templates', 'overdue_30_day', 'email_overdue_30_day_subject']));
-    $editable_config->set('email_overdue_30_day_body', $form_state->getValue(['email_templates', 'overdue_30_day', 'email_overdue_30_day_body']));
-
-    // Condition charge email
-    $editable_config->set('email_condition_charge_subject', $form_state->getValue(['email_templates', 'condition_charge', 'email_condition_charge_subject']));
-    $editable_config->set('email_condition_charge_body', $form_state->getValue(['email_templates', 'condition_charge', 'email_condition_charge_body']));
-
-    $editable_config->save();
-
+    $config
+      ->set('loan_period_days', $values['loan_settings']['loan_period_days'])
+      ->set('loan_terms_html', $values['loan_settings']['loan_terms_html'])
+      ->set('email_checkout_footer', $values['email_settings']['email_checkout_footer'])
+      ->set('email_return_body', $values['email_settings']['email_return_body'])
+      ->set('email_issue_notice_intro', $values['email_settings']['email_issue_notice_intro'])
+      ->set('email_overdue_subject', $values['email_settings']['overdue']['email_overdue_subject'])
+      ->set('email_overdue_body', $values['email_settings']['overdue']['email_overdue_body'])
+      ->set('email_overdue_30_day_subject', $values['email_settings']['overdue_30_day']['email_overdue_30_day_subject'])
+      ->set('email_overdue_30_day_body', $values['email_settings']['overdue_30_day']['email_overdue_30_day_body'])
+      ->set('email_condition_charge_subject', $values['email_settings']['condition_charge']['email_condition_charge_subject'])
+      ->set('email_condition_charge_body', $values['email_settings']['condition_charge']['email_condition_charge_body'])
+      ->save();
 
     parent::submitForm($form, $form_state);
   }
