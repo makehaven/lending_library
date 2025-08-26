@@ -1,0 +1,27 @@
+# docker-compose.yml
+
+# This file defines a self-contained Drupal environment for testing
+# the Lending Library module in isolation using Jules.
+# It is ignored by Pantheon and does not affect the live site.
+
+version: "3.8"
+
+services:
+  # The main Drupal service (PHP + Apache)
+  drupal:
+    image: drupal:10-php8.2-apache # A standard Drupal image
+    volumes:
+      # This special volume maps this module's code into the Drupal
+      # container's module directory. This is the key step.
+      - ./:/opt/drupal/web/modules/custom/lending_library
+    depends_on:
+      - db
+
+  # The MariaDB database service
+  db:
+    image: mariadb:10.4.17
+    environment:
+      - MYSQL_DATABASE=drupal
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=pass
+      - MYSQL_ROOT_PASSWORD=root_password
