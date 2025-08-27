@@ -97,6 +97,34 @@ This Drupal custom module powers the MakeHaven Lending Library. It manages tool 
 - **Battery return not logging** – Enable revisions for the Battery entity type in ECK if you want per-return history; otherwise the module still processes the return without a revision.  
 - **Access denied after submitting a form** – Usually caused when the entity is not saved (submit handler override issue). Ensure ECK’s submit handler is preserved.
 
+
+## Automated Testing with Jules
+
+This module can be tested in an isolated environment using Jules.
+
+### First-Time Setup
+
+1.  In Jules, add the Git repository for this module.
+2.  Navigate to the repository's **Configuration** tab.
+3.  Open the `scripts/jules-setup.sh` file from this repository.
+4.  Copy the **entire content** of the script.
+5.  Paste it into the **“Initial Setup”** window in the Jules UI.
+6.  Click **Run and Snapshot** to build the testing environment.
+
+Once the snapshot is created, Jules will be ready to help with development and testing tasks for this module.
+
+## Manual User Testing (One-Click Setup)
+
+For manual, in-browser testing where you can click around and test features, you can use Gitpod. This will create a temporary, fully functional Drupal site with the Lending Library module installed. No local software is required.
+
+[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/makehaven/lending_library)
+
+**Instructions:**
+1.  Click the "Open in Gitpod" button above.
+2.  Log in with your GitHub account.
+3.  Wait for the environment to build automatically (this may take a few minutes on the first launch).
+4.  A new browser tab will open with the Drupal site, ready for you to test. The login is `admin` / `admin`.
+
 ## License
 
 This module is custom-developed for MakeHaven and may be adapted for other organizations with similar needs.
