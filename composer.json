@@ -3,10 +3,15 @@
     "description": "Manages tool lending, transactions, and item statuses.",
     "type": "drupal-module",
     "license": "GPL-2.0-or-later",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://packages.drupal.org/8"
+        }
+    ],
     "require": {
       "drupal/eck": "^2",
       "drupal/field_permissions": "^2",
       "drupal/image_effects": "^3"
     }
   }
-  
