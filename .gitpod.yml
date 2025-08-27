@@ -7,22 +7,22 @@ tasks:
       sleep 15
       echo "--- Installing base Drupal dependencies... ---"
       docker compose exec -T drupal composer install
-      
-      echo "--- Installing Drupal Site ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush site:install minimal --db-url="mysql://user:pass@db:3306/drupal" --site-name="Lending Library Test" --account-name=admin --account-pass=admin -y
-      
+
       echo "--- Downloading module dependencies (ECK)... ---"
       docker compose exec -T drupal composer require drupal/eck -w
-      
+
+      echo "--- Installing Drupal Site ---"
+      docker compose exec -T drupal /opt/drupal/vendor/bin/drush site:install minimal --db-url="mysql://user:pass@db:3306/drupal" --site-name="Lending Library Test" --account-name=admin --account-pass=admin -y
+
       echo "--- Enabling the Lending Library module ---"
       docker compose exec -T drupal /opt/drupal/vendor/bin/drush en lending_library -y
-      
+
       echo "--- Clearing caches ---"
       docker compose exec -T drupal /opt/drupal/vendor/bin/drush cr
-      
+
       echo "--- Finalizing permissions ---"
       docker compose exec -T drupal chown -R www-data:www-data web/sites/default
-      
+
       echo "--- Setup complete! Site is ready. ---"
     command: |
       # This runs every time the workspace starts
