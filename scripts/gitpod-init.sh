@@ -26,6 +26,16 @@ docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush si standard
 echo "--- Enable ECK only (no lending_library) ---"
 docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en eck -y'
 
+# Make the module visible in Drupal (do not enable it)
+docker compose exec -T drupal bash -lc '
+mkdir -p /opt/drupal/web/modules/custom
+ln -sfn /opt/project /opt/drupal/web/modules/custom/lending_library
+test -f /opt/project/lending_library.info.yml || echo "WARNING: lending_library.info.yml not found (module may not appear)."
+/opt/drupal/vendor/bin/drush cr
+/opt/drupal/vendor/bin/drush pml --status=not-installed | grep lending_library || true
+'
+
+
 echo "--- Verbose error output ---"
 docker compose exec -T drupal bash -lc "cat <<'PHP' >> /opt/drupal/web/sites/default/settings.php
 \$config['system.logging']['error_level'] = 'verbose';
