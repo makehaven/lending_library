@@ -1,9 +1,7 @@
-# .gitpod.yml - Configuration for Gitpod Cloud Development Environment
-
+# .gitpod.yml
 tasks:
   - name: Setup and Launch Drupal
     init: |
-      # This runs only on the first start to prepare the environment
       echo "--- Preparing environment ---"
       docker compose up -d
       sleep 15
@@ -21,10 +19,8 @@ tasks:
       docker compose exec -T drupal chown -R www-data:www-data web/sites/default
       echo "--- Setup complete! Site is ready. ---"
     command: |
-      # This runs every time the workspace starts
       docker compose start
 
-# Define which ports to expose and what to do with them
 ports:
   - port: 8080
     onOpen: open-preview

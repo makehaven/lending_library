@@ -1,24 +1,17 @@
 # docker-compose.yml
-
-# This file defines a self-contained Drupal environment for testing
-# the Lending Library module in isolation using Gitpod or Jules.
-
 version: "3.8"
 
 services:
-  # The main Drupal service (PHP + Apache)
   drupal:
     image: drupal:10-php8.2-apache
-    working_dir: /opt/drupal # Set the working directory to the Drupal root
+    working_dir: /opt/drupal # This ensures commands run in the Drupal root
     volumes:
-      # Maps this module's code into the Drupal container's module directory
       - ./:/opt/drupal/web/modules/custom/lending_library
     ports:
       - "8080:80"
     depends_on:
       - db
 
-  # The MariaDB database service
   db:
     image: mariadb:10.4.17
     environment:
