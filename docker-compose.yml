@@ -1,6 +1,4 @@
 # docker-compose.yml
-version: "3.8"
-
 services:
   drupal:
     image: drupal:10-php8.2-apache
@@ -14,12 +12,12 @@ services:
       - db
 
   db:
-    image: mariadb:10.4.17
+    image: mariadb:10.4
     environment:
-      - MYSQL_DATABASE=drupal
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=pass
-      - MYSQL_ROOT_PASSWORD=root_password
+      MYSQL_DATABASE: drupal
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+      MYSQL_ROOT_PASSWORD: root_password
 
 volumes:
   drupal_data:
