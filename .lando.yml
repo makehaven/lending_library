@@ -1,0 +1,24 @@
+name: lending-library
+recipe: drupal10
+config:
+  php: "8.2"
+  webroot: d10/web
+
+services:
+  appserver:
+    overrides:
+      environment:
+        COMPOSER_MEMORY_LIMIT: -1
+
+tooling:
+  composer:
+    service: appserver
+  drush:
+    service: appserver
+
+events:
+  post-start:
+    - appserver: bash -lc "bash /app/scripts/lando-post-start.sh"
+
+
+

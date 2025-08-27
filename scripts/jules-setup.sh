@@ -1,51 +1,34 @@
-# scripts/gitpod-init.sh
-#!/usr/bin/env bash
+#!/bin/bash
+# scripts/jules-setup.sh
+
 set -euo pipefail
 
-echo "--- Start containers ---"
+echo "--- Starting Docker services ---"
 docker compose up -d
 sleep 15
 
-echo "--- Install tools + Composer ---"
-docker compose exec -T drupal bash -lc 'apt-get update && apt-get install -y curl git unzip default-mysql-client'
-docker compose exec -T drupal bash -lc 'printf "sendmail_path = /bin/true\n" > /usr/local/etc/php/conf.d/mail.ini'
-docker compose exec -T drupal bash -lc 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
+echo "--- Install Composer in container ---"
+docker compose exec -T drupal bash -lc 'apt-get update && apt-get install -y curl git unzip && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && composer --version'
 
 echo "--- Create Drupal project ---"
 docker compose exec -T drupal bash -lc 'mkdir -p /opt/drupal && [ -f /opt/drupal/composer.json ] || composer create-project drupal/recommended-project:^10.3 /opt/drupal'
-docker compose exec -T drupal bash -lc 'rm -rf /var/www/html && ln -sfn /opt/drupal/web /var/www/html'
 
-echo "--- Require Drush + ECK ---"
-docker compose exec -T drupal bash -lc 'cd /opt/drupal && composer require drush/drush:^13 drupal/eck:^2 -W'
+echo "--- Point Apache docroot at /opt/drupal/web ---"
+docker compose exec -T drupal bash -lc 'rm -rf /var/www/html && ln -s /opt/drupal/web /var/www/html'
 
-echo "--- Install Drupal ---"
+echo "--- Symlink this repo as a custom module ---"
+docker compose exec -T drupal bash -lc 'mkdir -p /opt/drupal/web/modules/custom && ln -sfn /opt/project /opt/drupal/web/modules/custom/lending_library'
+
+echo "--- Require Drush and deps ---"
+docker compose exec -T drupal bash -lc 'cd /opt/drupal && composer require drush/drush:^13 drupal/eck -W'
+
+echo "--- Install Drupal site ---"
 docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush si standard \
   --db-url='mysql://user:pass@db:3306/drupal' \
-  --site-name='Gitpod Drupal' \
+  --site-name='Lending Library Test' \
   --account-name=admin --account-pass=admin -y"
 
-echo "--- Enable ECK only ---"
-docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en eck -y'
-
-echo "--- Dev error verbosity ---"
-docker compose exec -T drupal bash -lc "cat <<'PHP' >> /opt/drupal/web/sites/default/settings.php
-\$config['system.logging']['error_level'] = 'verbose';
-\$settings['container_yamls'][] = DRUPAL_ROOT . '/sites/development.services.yml';
-ini_set('display_errors', TRUE);
-ini_set('display_startup_errors', TRUE);
-error_reporting(E_ALL);
-\$settings['rebuild_access'] = TRUE;
-PHP"
-docker compose exec -T drupal bash -lc "cat <<'YML' > /opt/drupal/web/sites/development.services.yml
-parameters:
-  http.response.debug_cacheability_headers: true
-  twig.config:
-    debug: true
-    auto_reload: true
-    cache: false
-YML"
-
-echo "--- Clear caches ---"
-docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush cr'
+echo "--- Enable custom module ---"
+docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en lending_library -y'
 
 echo "--- Done ---"
