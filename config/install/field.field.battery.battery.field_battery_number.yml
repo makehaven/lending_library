@@ -1,4 +1,4 @@
-uuid: dfbc11f6-8839-4091-8490-6151bbe7e2bd
+uuid: 6ff5c65f-efb1-4074-9241-d8d1ab44e8c5
 langcode: en
 status: true
 dependencies:
@@ -11,12 +11,12 @@ entity_type: battery
 bundle: battery
 label: 'Battery Number'
 description: ''
-required: true
+required: false
 translatable: false
 default_value: {  }
 default_value_callback: ''
 settings:
-  min: 0
+  min: null
   max: null
   prefix: ''
   suffix: ''

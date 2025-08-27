@@ -1,9 +1,13 @@
-uuid: 7d07168f-dc23-4c5d-992a-ec8e6c562b19
+uuid: 7763fdd6-03a5-4509-8271-2b3b851fc559
 langcode: en
 status: true
 dependencies:
   module:
+    - field_permissions
     - node
+third_party_settings:
+  field_permissions:
+    permission_type: custom
 id: node.field_library_item_uses_battery
 field_name: field_library_item_uses_battery
 entity_type: node

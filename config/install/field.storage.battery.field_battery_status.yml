@@ -1,0 +1,37 @@
+uuid: 34e7ba28-7dcc-48da-8f48-89fcf38d6fe9
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+    - options
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: battery.field_battery_status
+field_name: field_battery_status
+entity_type: battery
+type: list_string
+settings:
+  allowed_values:
+    -
+      value: available
+      label: available
+    -
+      value: borrowed
+      label: borrowed
+    -
+      value: missing
+      label: missing
+    -
+      value: retired
+      label: retired
+  allowed_values_function: ''
+module: options
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

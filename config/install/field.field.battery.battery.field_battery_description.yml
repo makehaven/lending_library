@@ -1,0 +1,19 @@
+uuid: 1daec0c9-0e75-48d3-bba8-f627eec58cb1
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.storage.battery.field_battery_description
+id: battery.battery.field_battery_description
+field_name: field_battery_description
+entity_type: battery
+bundle: battery
+label: Description
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: string

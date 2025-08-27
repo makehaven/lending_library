@@ -1,0 +1,24 @@
+uuid: 71d19092-7809-4c68-87ac-8d32844f6c1b
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_use_end_date
+    - node.type.library_item
+  module:
+    - datetime
+id: node.library_item.field_library_item_use_end_date
+field_name: field_library_item_use_end_date
+entity_type: node
+bundle: library_item
+label: 'Estimated Useful Life End Date'
+description: 'Estimate the date when this item is projected to be at the end of its useful life. This is used to evaluate capital replacement budget.'
+required: false
+translatable: false
+default_value:
+  -
+    default_date_type: relative
+    default_date: '+7 Years'
+default_value_callback: ''
+settings: {  }
+field_type: datetime

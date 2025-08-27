@@ -1,0 +1,23 @@
+uuid: e3ecd83c-695e-4ccd-a449-be9e989ef794
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.storage.battery.field_battery_value
+id: battery.battery.field_battery_value
+field_name: field_battery_value
+entity_type: battery
+bundle: battery
+label: 'Battery Value'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  min: null
+  max: null
+  prefix: ''
+  suffix: ''
+field_type: decimal

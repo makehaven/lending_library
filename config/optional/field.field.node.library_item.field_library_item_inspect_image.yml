@@ -1,0 +1,38 @@
+uuid: f4f0cb07-d802-4a57-b6aa-f75b97482cab
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_inspect_image
+    - node.type.library_item
+  module:
+    - image
+id: node.library_item.field_library_item_inspect_image
+field_name: field_library_item_inspect_image
+entity_type: node
+bundle: library_item
+label: 'Inspection Exemplar Image'
+description: 'Replicate this image during both check-out and check-in of the tool.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:file'
+  handler_settings: {  }
+  file_directory: library
+  file_extensions: 'png gif jpg jpeg'
+  max_filesize: ''
+  max_resolution: 1600x1600
+  min_resolution: ''
+  alt_field: false
+  alt_field_required: true
+  title_field: false
+  title_field_required: false
+  default_image:
+    uuid: ''
+    alt: ''
+    title: ''
+    width: null
+    height: null
+field_type: image

@@ -1,0 +1,23 @@
+uuid: 9ece2617-defa-471c-a1ef-a213f6b512b9
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_manual
+    - node.type.library_item
+  module:
+    - link
+id: node.library_item.field_library_item_manual
+field_name: field_library_item_manual
+entity_type: node
+bundle: library_item
+label: 'Library Item Manual'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  title: 1
+  link_type: 17
+field_type: link

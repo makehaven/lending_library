@@ -1,0 +1,22 @@
+uuid: 52bf9b83-17d7-4ab4-8d80-473676c73fec
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: library_transaction.field_library_closed
+field_name: field_library_closed
+entity_type: library_transaction
+type: boolean
+settings: {  }
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

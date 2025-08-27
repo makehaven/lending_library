@@ -1,9 +1,13 @@
-uuid: fe0c5202-8ac2-4ac3-8be7-9e2da82e6593
+uuid: ac69ceb2-181b-43fa-ad17-7221d99723a7
 langcode: en
 status: true
 dependencies:
   module:
     - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
 id: battery.field_battery_number
 field_name: field_battery_number
 entity_type: battery

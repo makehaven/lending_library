@@ -1,4 +1,4 @@
-uuid: e4dbded6-c7a6-4792-ab06-6a9b2b3f0751
+uuid: a7fa6d41-dfa6-474c-943c-e1dad9213a70
 langcode: en
 status: true
 dependencies:
@@ -11,7 +11,7 @@ id: library_transaction.library_transaction.field_library_return_date
 field_name: field_library_return_date
 entity_type: library_transaction
 bundle: library_transaction
-label: 'Library Return date '
+label: 'Library Return date'
 description: ''
 required: false
 translatable: false

@@ -1,4 +1,4 @@
-uuid: 19b13ca4-b3b0-4295-9bb8-79b99f0ed1fc
+uuid: 4844471d-9bf8-4f53-a6be-cba790bb977f
 langcode: en
 status: true
 dependencies:
@@ -9,7 +9,7 @@ id: node.library_item.field_library_item_borrower
 field_name: field_library_item_borrower
 entity_type: node
 bundle: library_item
-label: 'Library Item Borrower'
+label: Borrower
 description: ''
 required: false
 translatable: false
@@ -25,5 +25,5 @@ settings:
     auto_create: false
     filter:
       type: _none
-    include_anonymous: true
+    include_anonymous: false
 field_type: entity_reference

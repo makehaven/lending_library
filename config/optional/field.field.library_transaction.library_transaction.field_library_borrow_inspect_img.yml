@@ -1,4 +1,4 @@
-uuid: 2db60e36-503a-4853-976b-10ba22de5a09
+uuid: 10f28cd4-323e-43a6-a534-2b35b4665f2a
 langcode: en
 status: true
 dependencies:
@@ -15,7 +15,7 @@ id: library_transaction.library_transaction.field_library_borrow_inspect_img
 field_name: field_library_borrow_inspect_img
 entity_type: library_transaction
 bundle: library_transaction
-label: library_borrow_inspect_img
+label: 'Library Borrow Inspect Image'
 description: ''
 required: false
 translatable: false
@@ -29,7 +29,7 @@ settings:
   max_filesize: ''
   max_resolution: ''
   min_resolution: ''
-  alt_field: true
+  alt_field: false
   alt_field_required: true
   title_field: false
   title_field_required: false

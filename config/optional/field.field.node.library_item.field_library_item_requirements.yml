@@ -1,0 +1,30 @@
+uuid: a5c4d724-f27d-4dcd-b4c1-463cf013ded7
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_requirements
+    - node.type.library_item
+    - taxonomy.vocabulary.equipment_requirements
+id: node.library_item.field_library_item_requirements
+field_name: field_library_item_requirements
+entity_type: node
+bundle: library_item
+label: 'Library Item Requirements'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:taxonomy_term'
+  handler_settings:
+    target_bundles:
+      equipment_requirements: equipment_requirements
+    sort:
+      field: name
+      direction: ASC
+    behaviors:
+      views-select-list:
+        status: 0
+field_type: entity_reference

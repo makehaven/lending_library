@@ -1,0 +1,24 @@
+uuid: 22d5a4e9-e32d-42c8-ba52-ea98bb4281f9
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+    - node
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: battery.field_battery_current_item
+field_name: field_battery_current_item
+entity_type: battery
+type: entity_reference
+settings:
+  target_type: node
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

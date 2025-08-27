@@ -1,0 +1,25 @@
+uuid: a6c32493-9b66-44d9-9a7b-128db65c4c9a
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: battery.field_battery_description
+field_name: field_battery_description
+entity_type: battery
+type: string
+settings:
+  max_length: 255
+  case_sensitive: false
+  is_ascii: false
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

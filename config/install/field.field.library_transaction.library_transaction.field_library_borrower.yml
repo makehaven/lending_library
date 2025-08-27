@@ -1,4 +1,4 @@
-uuid: 7729b873-5d17-4ded-b3b1-dfc32788ba08
+uuid: 3836e255-ed3b-4b66-b021-995018ea28bc
 langcode: en
 status: true
 dependencies:
@@ -11,7 +11,7 @@ entity_type: library_transaction
 bundle: library_transaction
 label: 'Library Borrower'
 description: ''
-required: true
+required: false
 translatable: false
 default_value: {  }
 default_value_callback: ''
@@ -24,19 +24,6 @@ settings:
       direction: ASC
     auto_create: false
     filter:
-      type: role
-      role:
-        administrator: administrator
-        manager: manager
-        special: special
-        borrower: borrower
-        data: '0'
-        content_editor: '0'
-        facilitator: '0'
-        instructor: '0'
-        business: '0'
-        member: '0'
-        member_pending_approval: '0'
-        services: '0'
-    include_anonymous: true
+      type: _none
+    include_anonymous: false
 field_type: entity_reference
