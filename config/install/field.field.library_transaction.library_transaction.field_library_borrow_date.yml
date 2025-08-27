@@ -1,4 +1,4 @@
-uuid: 3e3de5cd-f78d-4217-a83f-0b99565c2cae
+uuid: f65c2c12-04b3-4628-8e26-03960dc98bfa
 langcode: en
 status: true
 dependencies:
@@ -11,7 +11,7 @@ id: library_transaction.library_transaction.field_library_borrow_date
 field_name: field_library_borrow_date
 entity_type: library_transaction
 bundle: library_transaction
-label: 'Library Borrow date '
+label: 'Library Borrow date'
 description: ''
 required: false
 translatable: false

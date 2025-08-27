@@ -1,9 +1,13 @@
-uuid: dd5a331d-6733-49e5-a9bf-4697da951b64
+uuid: 55826e8b-1924-4ea5-9e9a-0c555db82d55
 langcode: en
 status: true
 dependencies:
   module:
     - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
 id: library_transaction.field_library_renew_count
 field_name: field_library_renew_count
 entity_type: library_transaction

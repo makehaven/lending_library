@@ -1,0 +1,24 @@
+uuid: b136379c-c7d4-4cb5-b2a4-5268fc426520
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: library_transaction.field_library_charge_battery
+field_name: field_library_charge_battery
+entity_type: library_transaction
+type: decimal
+settings:
+  precision: 10
+  scale: 2
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

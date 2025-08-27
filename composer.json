@@ -1,6 +1,16 @@
 {
     "name": "makehaven/lending_library",
+    "description": "Manages tool lending, transactions, and item statuses.",
     "type": "drupal-custom-module",
-    "description": "Manages tool lending, transactions, and associated item statuses.' # Updated description",
-    "license": "GPL-2.0-or-later"
-}
+    "license": "GPL-2.0-or-later",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://packages.drupal.org/8"
+        }
+    ],
+    "require": {
+      "drupal/eck": "^2",
+      "drupal/field_permissions": "^1.4"
+    }
+  }

@@ -1,0 +1,9 @@
+uuid: 9de95938-aecc-40fd-beee-b54c049ae782
+langcode: en
+status: true
+dependencies: {  }
+name: 'Library Item Category'
+vid: library_item_category
+description: null
+weight: 0
+new_revision: false

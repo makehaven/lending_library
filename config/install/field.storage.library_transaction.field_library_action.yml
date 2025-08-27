@@ -1,4 +1,4 @@
-uuid: be930c06-1d26-453c-9206-5de6058768ee
+uuid: 2bf34f8e-321b-475f-a37d-235bf8f795b7
 langcode: en
 status: true
 dependencies:
@@ -19,7 +19,7 @@ settings:
       label: Return
     -
       value: damage
-      label: Damage
+      label: Issue
   allowed_values_function: ''
 module: options
 locked: false

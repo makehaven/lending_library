@@ -1,10 +1,14 @@
-uuid: 97a9836c-2df0-4015-850d-750e634bffad
+uuid: f87ae6a7-2537-4d74-975f-b240d7d92c2f
 langcode: en
 status: true
 dependencies:
   module:
     - eck
+    - field_permissions
     - node
+third_party_settings:
+  field_permissions:
+    permission_type: custom
 id: library_transaction.field_library_item
 field_name: field_library_item
 entity_type: library_transaction

@@ -1,0 +1,23 @@
+uuid: e4fd4f3b-5792-4f4d-be79-cb62b961786f
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_charge_overdue
+id: library_transaction.library_transaction.field_library_charge_overdue
+field_name: field_library_charge_overdue
+entity_type: library_transaction
+bundle: library_transaction
+label: 'library charge overdue'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  min: null
+  max: null
+  prefix: ''
+  suffix: ''
+field_type: decimal

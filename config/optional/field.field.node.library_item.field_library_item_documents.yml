@@ -1,0 +1,27 @@
+uuid: b9730af7-0dfd-4b9e-9648-a056e9a0f513
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_documents
+    - node.type.library_item
+  module:
+    - file
+id: node.library_item.field_library_item_documents
+field_name: field_library_item_documents
+entity_type: node
+bundle: library_item
+label: Documents
+description: 'upload tool manuals.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:file'
+  handler_settings: {  }
+  file_directory: library/manuals
+  file_extensions: pdf
+  max_filesize: ''
+  description_field: true
+field_type: file

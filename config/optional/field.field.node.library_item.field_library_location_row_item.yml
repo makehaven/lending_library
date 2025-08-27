@@ -1,0 +1,21 @@
+uuid: d116afa7-f631-4ebf-a75d-095b21a74405
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_location_row_item
+    - node.type.library_item
+  module:
+    - options
+id: node.library_item.field_library_location_row_item
+field_name: field_library_location_row_item
+entity_type: node
+bundle: library_item
+label: Row
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: list_string

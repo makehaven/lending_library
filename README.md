@@ -125,6 +125,25 @@ For manual, in-browser testing where you can click around and test features, you
 3.  Wait for the environment to build automatically (this may take a few minutes on the first launch).
 4.  A new browser tab will open with the Drupal site, ready for you to test. The login is `admin` / `admin`.
 
+
+## Local Development with Lando
+
+# 1) Clone the sandbox and module side-by-side
+git clone git@github.com:makehaven/drupal-sandbox.git d10
+git clone git@github.com:makehaven/lending_library.git
+
+# 2) Start Lando in the sandbox folder
+cd d10
+lando start
+
+# 3) Tell Composer where the module lives and install it
+lando ssh -s appserver -c 'composer -d /app/d10 config repositories.lending_library path ../lending_library'
+lando ssh -s appserver -c 'composer -d /app/d10 require makehaven/lending_library:*@dev --no-update && composer -d /app/d10 install'
+
+# 4) Enable deps you want (ECK already enabled by post-start)
+lando drush -r d10/web pml --status=not-installed | grep lending_library
+
+
 ## License
 
 This module is custom-developed for MakeHaven and may be adapted for other organizations with similar needs.

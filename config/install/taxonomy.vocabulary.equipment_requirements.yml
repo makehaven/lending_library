@@ -1,0 +1,9 @@
+uuid: e53ee560-8066-43f7-8e0c-48e75cfc559f
+langcode: en
+status: true
+dependencies: {  }
+name: 'Equipment Requirements'
+vid: equipment_requirements
+description: null
+weight: 7
+new_revision: false

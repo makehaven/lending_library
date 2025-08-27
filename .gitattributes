@@ -1,0 +1,9 @@
+/.lando.yml export-ignore
+/.gitpod.yml export-ignore
+/docker-compose.yml export-ignore
+/scripts/ export-ignore
+/d10/ export-ignore
+/.env export-ignore
+/tests/ export-ignore
+/.editorconfig export-ignore
+/.github/ export-ignore

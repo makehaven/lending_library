@@ -1,0 +1,21 @@
+uuid: 2b9f9752-c4b7-481b-ae68-d7700ec774b4
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_closed
+id: library_transaction.library_transaction.field_library_closed
+field_name: field_library_closed
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Transaction Closed'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  on_label: Closed
+  off_label: Open
+field_type: boolean

@@ -1,4 +1,4 @@
-uuid: f3d004ff-01b2-476f-be63-14d0522f8241
+uuid: acabb1a4-319d-496b-8332-1b25892d8837
 langcode: en
 status: true
 dependencies:
@@ -17,13 +17,13 @@ settings:
   allowed_values:
     -
       value: available
-      label: available
+      label: Available
     -
       value: borrowed
-      label: borrowed
+      label: Borrowed
     -
       value: missing
-      label: 'Missing,'
+      label: Missing
     -
       value: retired
       label: Retired

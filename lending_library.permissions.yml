@@ -1,0 +1,17 @@
+# lending_library.permissions.yml
+
+create library_transaction entities:
+  title: 'Create Library Transaction entities'
+  description: 'Allows users to create and save Library Transaction entities.'
+
+view library_transaction entities:
+  title: 'View Library Transaction entities'
+  description: 'Allows users to view Library Transaction entities.'
+
+edit own library_transaction entities:
+  title: 'Edit own Library Transaction entities'
+  description: 'Allows users to edit their own Library Transaction entities.'
+
+delete own library_transaction entities:
+  title: 'Delete own Library Transaction entities'
+  description: 'Allows users to delete their own Library Transaction entities.'

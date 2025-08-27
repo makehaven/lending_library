@@ -4,6 +4,8 @@ status: true
 dependencies:
   config:
     - eck.eck_entity_type.library_transaction
-name: 'Library Transaction'
+_core:
+  default_config_hash: gacQLHPsxNnrIV-qNK_oOgyGRix2DomUHJn3HWsZM6E
 type: library_transaction
+name: 'Library Transaction'
 description: ''

@@ -1,0 +1,24 @@
+uuid: 904735a0-a65d-4750-968c-ba59210cd573
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+    - user
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: battery.field_battery_borrower
+field_name: field_battery_borrower
+entity_type: battery
+type: entity_reference
+settings:
+  target_type: user
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

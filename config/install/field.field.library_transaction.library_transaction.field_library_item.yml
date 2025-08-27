@@ -1,4 +1,4 @@
-uuid: 32f7c991-76e7-430b-9eac-4fa35e1ab815
+uuid: 530d1008-fca7-4b61-b643-bf0a495164a2
 langcode: en
 status: true
 dependencies:
@@ -22,7 +22,7 @@ settings:
     target_bundles:
       library_item: library_item
     sort:
-      field: _none
+      field: title
       direction: ASC
     auto_create: false
     auto_create_bundle: ''

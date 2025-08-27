@@ -1,0 +1,29 @@
+uuid: 8f3f2cc7-5b7c-4b17-9c8f-f014edd4eb46
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.storage.battery.field_battery_current_item
+    - node.type.library_item
+id: battery.battery.field_battery_current_item
+field_name: field_battery_current_item
+entity_type: battery
+bundle: battery
+label: battery_current_item
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:node'
+  handler_settings:
+    target_bundles:
+      library_item: library_item
+    sort:
+      field: _none
+      direction: ASC
+    auto_create: false
+    auto_create_bundle: ''
+field_type: entity_reference

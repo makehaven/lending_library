@@ -1,0 +1,29 @@
+uuid: 090cfec2-e90c-47a5-9e08-2e794ba7f4ba
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.battery.battery
+    - field.storage.battery.field_battery_borrower
+id: battery.battery.field_battery_borrower
+field_name: field_battery_borrower
+entity_type: battery
+bundle: battery
+label: battery_borrower
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:user'
+  handler_settings:
+    target_bundles: null
+    sort:
+      field: _none
+      direction: ASC
+    auto_create: false
+    filter:
+      type: _none
+    include_anonymous: false
+field_type: entity_reference

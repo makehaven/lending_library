@@ -1,0 +1,15 @@
+name: lending-library
+recipe: drupal10
+config:
+  php: "8.2"
+  webroot: d10/web
+
+events:
+  post-start:
+    - appserver: bash -lc "bash /app/scripts/lando-post-start.sh"
+
+tooling:
+  composer:
+    service: appserver
+  drush:
+    service: appserver
