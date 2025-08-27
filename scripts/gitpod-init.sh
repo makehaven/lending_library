@@ -20,13 +20,14 @@ docker compose exec -T drupal bash -lc 'cd /opt/drupal && composer require drush
 echo "--- Install Drupal ---"
 # MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
 docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush -r /opt/drupal/web si standard \
-  --db-url='mysql://user:pass@db:3306/drupal' \
+  --db-url='mysql://drupal10:drupal10@db:3306/drupal10' \
   --site-name='Gitpod Drupal' \
   --account-name=admin --account-pass=admin -y"
 
-echo "--- Enable ECK only (no lending_library) ---"
+echo "--- Enable module dependencies and the module itself ---"
 # MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
-docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush -r /opt/drupal/web en eck -y'
+docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush -r /opt/drupal/web en -y eck lending_library'
+
 
 # Make the module visible in Drupal (do not enable it)
 docker compose exec -T drupal bash -lc '
