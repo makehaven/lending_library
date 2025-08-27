@@ -1,36 +1,46 @@
-# .gitpod.yml - Final working version
+# .gitpod.yml
 tasks:
   - name: Setup and Launch Drupal
     init: |
       echo "--- Preparing environment ---"
       docker compose up -d
+      # Give DB a moment to initialize
       sleep 15
-      echo "--- Installing base Drupal dependencies... ---"
-      docker compose exec -T drupal composer install
 
-      echo "--- Downloading module dependencies (ECK)... ---"
-      docker compose exec -T drupal composer require drupal/eck -w
+      echo "--- Install Composer in container ---"
+      docker compose exec -T drupal bash -lc 'apt-get update && apt-get install -y curl git unzip && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && composer --version'
 
-      echo "--- Installing Drupal Site ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush site:install minimal --db-url="mysql://user:pass@db:3306/drupal" --site-name="Lending Library Test" --account-name=admin --account-pass=admin -y
+      echo "--- Create Drupal project (composer) ---"
+      docker compose exec -T drupal bash -lc 'mkdir -p /opt/drupal && [ -f /opt/drupal/composer.json ] || composer create-project drupal/recommended-project:^10.3 /opt/drupal'
 
-      echo "--- Enabling the Lending Library module ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush en lending_library -y
+      echo "--- Point Apache docroot at /opt/drupal/web ---"
+      docker compose exec -T drupal bash -lc 'rm -rf /var/www/html && ln -s /opt/drupal/web /var/www/html'
 
-      echo "--- Clearing caches ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush cr
+      echo "--- Symlink this repo as a custom module ---"
+      docker compose exec -T drupal bash -lc 'mkdir -p /opt/drupal/web/modules/custom && ln -sfn /opt/project /opt/drupal/web/modules/custom/lending_library'
 
-      echo "--- Finalizing permissions ---"
-      docker compose exec -T drupal chown -R www-data:www-data web/sites/default
+      echo "--- Require Drush and module deps ---"
+      docker compose exec -T drupal bash -lc 'cd /opt/drupal && composer require drush/drush:^13 drupal/eck -W'
 
-      echo "--- Setup complete! Site is ready. ---"
+      echo "--- Install Drupal site ---"
+      docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush si standard \
+        --db-url='mysql://user:pass@db:3306/drupal' \
+        --site-name='Lending Library Test' \
+        --account-name=admin --account-pass=admin -y"
+
+      echo "--- Enable your module ---"
+      docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en lending_library -y'
+
+      echo "--- Set file permissions ---"
+      docker compose exec -T drupal bash -lc 'chown -R www-data:www-data /opt/drupal/web/sites/default/files || true'
+
+      echo "--- Setup complete ---"
     command: |
-      # This runs every time the workspace starts
+      # Runs on each workspace start (keeps containers running)
       docker compose start
 
-# Define which ports to expose and what to do with them
 ports:
   - port: 8080
-    onOpen: open-browser # Automatically open the Drupal site
+    onOpen: open-browser
   - port: 3306
     onOpen: ignore

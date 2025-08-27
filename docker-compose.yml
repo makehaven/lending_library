@@ -4,11 +4,12 @@ version: "3.8"
 services:
   drupal:
     image: drupal:10-php8.2-apache
-    working_dir: /opt/drupal
-    volumes:
-      - ./:/opt/drupal/web/modules/custom/lending_library
+    working_dir: /opt/project
     ports:
       - "8080:80"
+    volumes:
+      - ./:/opt/project
+      - drupal_data:/opt/drupal
     depends_on:
       - db
 
@@ -19,3 +20,6 @@ services:
       - MYSQL_USER=user
       - MYSQL_PASSWORD=pass
       - MYSQL_ROOT_PASSWORD=root_password
+
+volumes:
+  drupal_data:
