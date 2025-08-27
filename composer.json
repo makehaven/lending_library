@@ -11,7 +11,7 @@
     ],
     "require": {
       "drupal/eck": "^2",
-      "drupal/field_permissions": "^2",
+      "drupal/field_permissions": "^1.4",
       "drupal/image_effects": "^3"
     }
   }

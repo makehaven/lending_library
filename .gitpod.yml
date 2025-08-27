@@ -1,6 +1,7 @@
-# .gitpod.yml
 tasks:
-  - name: Setup Drupal + ECK (no custom module)
+  - name: Setup
+    before: |
+      git config --global --add safe.directory /opt/drupal
     init: |
       bash scripts/gitpod-init.sh
     command: |
