@@ -1,19 +1,20 @@
 # docker-compose.yml
 
 # This file defines a self-contained Drupal environment for testing
-# the Lending Library module in isolation using Jules.
-# It is ignored by Pantheon and does not affect the live site.
+# the Lending Library module in isolation using Gitpod or Jules.
 
 version: "3.8"
 
 services:
   # The main Drupal service (PHP + Apache)
   drupal:
-    image: drupal:10-php8.2-apache # A standard Drupal image
+    image: drupal:10-php8.2-apache
+    working_dir: /opt/drupal # Set the working directory to the Drupal root
     volumes:
-      # This special volume maps this module's code into the Drupal
-      # container's module directory. This is the key step.
+      # Maps this module's code into the Drupal container's module directory
       - ./:/opt/drupal/web/modules/custom/lending_library
+    ports:
+      - "8080:80"
     depends_on:
       - db
 

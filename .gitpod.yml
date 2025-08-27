@@ -7,16 +7,18 @@ tasks:
       echo "--- Preparing environment ---"
       docker compose up -d
       sleep 15
-      echo "--- Installing base dependencies with Composer ---"
+      echo "--- Installing base Drupal dependencies (this takes a moment)... ---"
       docker compose exec -T drupal composer install
-      echo "--- Installing Drupal ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush site:install minimal --db-url="mysql://user:pass@db:3306/drupal" --site-name="Lending Library Test" --account-name=admin --account-pass=admin -y
-      echo "--- Downloading module dependencies ---"
+      echo "--- Installing Drupal Site ---"
+      docker compose exec -T drupal vendor/bin/drush site:install minimal --db-url="mysql://user:pass@db:3306/drupal" --site-name="Lending Library Test" --account-name=admin --account-pass=admin -y
+      echo "--- Downloading module dependencies (ECK)... ---"
       docker compose exec -T drupal composer require drupal/eck
       echo "--- Enabling the Lending Library module ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush en lending_library -y
+      docker compose exec -T drupal vendor/bin/drush en lending_library -y
       echo "--- Clearing caches ---"
-      docker compose exec -T drupal /opt/drupal/vendor/bin/drush cr
+      docker compose exec -T drupal vendor/bin/drush cr
+      echo "--- Finalizing permissions ---"
+      docker compose exec -T drupal chown -R www-data:www-data web/sites/default
       echo "--- Setup complete! Site is ready. ---"
     command: |
       # This runs every time the workspace starts
@@ -25,6 +27,6 @@ tasks:
 # Define which ports to expose and what to do with them
 ports:
   - port: 8080
-    onOpen: open-preview # Automatically open the Drupal site in a browser tab
+    onOpen: open-preview
   - port: 3306
     onOpen: ignore
