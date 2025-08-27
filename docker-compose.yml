@@ -3,7 +3,7 @@ services:
   drupal:
     image: drupal:10-php8.2-apache
     volumes:
-      - ./:/opt/drupal
+      - ./:/opt/project
     ports:
       - "8080:80"
     depends_on:
