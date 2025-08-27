@@ -126,7 +126,8 @@ For manual, in-browser testing where you can click around and test features, you
 4.  A new browser tab will open with the Drupal site, ready for you to test. The login is `admin` / `admin`.
 
 
-## Local Development with Lando
+
+## Local Development with Lando 
 
 # 1) Clone the sandbox and module side-by-side
 git clone git@github.com:makehaven/drupal-sandbox.git d10

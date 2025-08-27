@@ -28,6 +28,7 @@ echo "--- Enable module dependencies and the module itself ---"
 # MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
 docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush -r /opt/drupal/web en -y eck lending_library'
 
+
 # Make the module visible in Drupal (do not enable it)
 docker compose exec -T drupal bash -lc '
 mkdir -p /opt/drupal/web/modules/custom
