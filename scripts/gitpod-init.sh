@@ -18,21 +18,24 @@ echo "--- Require Drush + ECK (only) ---"
 docker compose exec -T drupal bash -lc 'cd /opt/drupal && composer require drush/drush:^13 drupal/eck:^2 -W'
 
 echo "--- Install Drupal ---"
-docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush si standard \
+# MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
+docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush -r /opt/drupal/web si standard \
   --db-url='mysql://user:pass@db:3306/drupal' \
   --site-name='Gitpod Drupal' \
   --account-name=admin --account-pass=admin -y"
 
 echo "--- Enable ECK only (no lending_library) ---"
-docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en eck -y'
+# MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
+docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush -r /opt/drupal/web en eck -y'
 
 # Make the module visible in Drupal (do not enable it)
 docker compose exec -T drupal bash -lc '
 mkdir -p /opt/drupal/web/modules/custom
 ln -sfn /opt/project /opt/drupal/web/modules/custom/lending_library
 test -f /opt/project/lending_library.info.yml || echo "WARNING: lending_library.info.yml not found (module may not appear)."
-/opt/drupal/vendor/bin/drush cr
-/opt/drupal/vendor/bin/drush pml --status=not-installed | grep lending_library || true
+# MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
+/opt/drupal/vendor/bin/drush -r /opt/drupal/web cr
+/opt/drupal/vendor/bin/drush -r /opt/drupal/web pml --status=not-installed | grep lending_library || true
 '
 
 
@@ -55,6 +58,7 @@ parameters:
 YML"
 
 echo "--- Clear caches ---"
-docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush cr'
+# MODIFIED: Added -r /opt/drupal/web to specify the Drupal root for Drush
+docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush -r /opt/drupal/web cr'
 
 echo "--- Done ---"
