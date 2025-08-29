@@ -5,6 +5,8 @@ dependencies:
     - eck.eck_type.library_transaction.library_transaction
     - field.storage.library_transaction.field_library_30day_processed
 id: library_transaction.library_transaction.field_library_30day_processed
+field_name: field_library_30day_processed
+entity_type: library_transaction
 bundle: library_transaction
 label: '30-day overdue processed'
 description: 'Indicates whether the 30-day overdue processing has been completed for this transaction.'
