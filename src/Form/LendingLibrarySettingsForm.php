@@ -141,6 +141,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#rows' => 5,
     ];
 
+    $form['email_settings']['due_soon'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Due Soon Notification (24 hours)'),
+      '#group' => 'email_settings',
+    ];
+    $form['email_settings']['due_soon']['email_due_soon_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_due_soon_subject') ?: $this->t('Your borrowed tool is due soon'),
+    ];
+    $form['email_settings']['due_soon']['email_due_soon_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_due_soon_body') ?: $this->t("Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees."),
+        '#rows' => 5,
+    ];
+
     $form['email_settings']['condition_charge'] = [
         '#type' => 'details',
         '#title' => $this->t('Condition Charge Notification'),
@@ -187,6 +204,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       ->set('email_overdue_body', $form_state->getValue('email_overdue_body'))
       ->set('email_overdue_30_day_subject', $form_state->getValue('email_overdue_30_day_subject'))
       ->set('email_overdue_30_day_body', $form_state->getValue('email_overdue_30_day_body'))
+      ->set('email_due_soon_subject', $form_state->getValue('email_due_soon_subject'))
+      ->set('email_due_soon_body', $form_state->getValue('email_due_soon_body'))
       ->set('email_condition_charge_subject', $form_state->getValue('email_condition_charge_subject'))
       ->set('email_condition_charge_body', $form_state->getValue('email_condition_charge_body'))
       ->set('battery_return_message', $form_state->getValue('battery_return_message'))
