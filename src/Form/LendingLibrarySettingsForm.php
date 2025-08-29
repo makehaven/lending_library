@@ -64,6 +64,18 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#open' => TRUE,
     ];
 
+    $form['email_settings']['enable_due_soon_notifications'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable "Due Soon" notifications'),
+      '#default_value' => $config->get('enable_due_soon_notifications'),
+    ];
+
+    $form['email_settings']['enable_overdue_notifications'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable "Overdue" notifications'),
+      '#default_value' => $config->get('enable_overdue_notifications'),
+    ];
+
     $form['email_settings']['email_checkout_footer'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Checkout email footer'),
@@ -86,6 +98,13 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#description' => $this->t('First line(s) of the issue notification email sent to staff. Plain text or basic HTML.'),
       '#default_value' => $config->get('email_issue_notice_intro') ?: '',
       '#rows' => 3,
+    ];
+
+    $form['email_settings']['email_staff_address'] = [
+      '#type' => 'email',
+      '#title' => $this->t('Staff notification email address'),
+      '#description' => $this->t('The email address to which staff notifications are sent.'),
+      '#default_value' => $config->get('email_staff_address') ?: '',
     ];
 
     $form['email_settings']['overdue'] = [
@@ -119,6 +138,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_overdue_30_day_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' is now 30 days overdue. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]"),
+        '#rows' => 5,
+    ];
+
+    $form['email_settings']['due_soon'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Due Soon Notification (24 hours)'),
+      '#group' => 'email_settings',
+    ];
+    $form['email_settings']['due_soon']['email_due_soon_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_due_soon_subject') ?: $this->t('Your borrowed tool is due soon'),
+    ];
+    $form['email_settings']['due_soon']['email_due_soon_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_due_soon_body') ?: $this->t("Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees."),
         '#rows' => 5,
     ];
 
@@ -158,13 +194,18 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     $config
       ->set('loan_period_days', $form_state->getValue('loan_period_days'))
       ->set('loan_terms_html', $form_state->getValue('loan_terms_html'))
+      ->set('enable_due_soon_notifications', $form_state->getValue('enable_due_soon_notifications'))
+      ->set('enable_overdue_notifications', $form_state->getValue('enable_overdue_notifications'))
       ->set('email_checkout_footer', $form_state->getValue('email_checkout_footer'))
       ->set('email_return_body', $form_state->getValue('email_return_body'))
       ->set('email_issue_notice_intro', $form_state->getValue('email_issue_notice_intro'))
+      ->set('email_staff_address', $form_state->getValue('email_staff_address'))
       ->set('email_overdue_subject', $form_state->getValue('email_overdue_subject'))
       ->set('email_overdue_body', $form_state->getValue('email_overdue_body'))
       ->set('email_overdue_30_day_subject', $form_state->getValue('email_overdue_30_day_subject'))
       ->set('email_overdue_30_day_body', $form_state->getValue('email_overdue_30_day_body'))
+      ->set('email_due_soon_subject', $form_state->getValue('email_due_soon_subject'))
+      ->set('email_due_soon_body', $form_state->getValue('email_due_soon_body'))
       ->set('email_condition_charge_subject', $form_state->getValue('email_condition_charge_subject'))
       ->set('email_condition_charge_body', $form_state->getValue('email_condition_charge_body'))
       ->set('battery_return_message', $form_state->getValue('battery_return_message'))

@@ -56,8 +56,6 @@ define('LENDING_LIBRARY_BATTERY_STATUS_MISSING', 'missing');
 define('LENDING_LIBRARY_BATTERY_STATUS_RETIRED', 'retired');
 
 
-// Email fallback for staff notifications (change if needed).
-define('LENDING_LIBRARY_STAFF_EMAIL', 'team@makehaven.org');
 // --- END CONFIGURATION CONSTANTS ---
 
 
@@ -95,6 +93,18 @@ function _lending_library_get_item_details(NodeInterface $library_item_node = NU
     'borrower_uid' => $borrower_uid,
     'replacement_value' => $replacement_value,
   ];
+}
+
+/**
+ * Sends a "due soon" email.
+ */
+function _lending_library_send_due_soon_email(EntityInterface $transaction) {
+  // Flag as notified.
+  if ($transaction->hasField('field_library_due_soon_notified')) {
+    $transaction->set('field_library_due_soon_notified', 1);
+    $transaction->save();
+  }
+  _lending_library_send_email_by_key($transaction, 'due_soon');
 }
 
 /**
@@ -840,31 +850,41 @@ function lending_library_cron() {
     }
 
     $due_date = $transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
+
     if ($due_date > $now) {
-      continue; // Not overdue yet.
-    }
+      // Not overdue yet. Check for due soon.
+      $one_day_interval = new \DateInterval('P1D');
+      $due_soon_threshold = (clone $now)->add($one_day_interval);
 
-    $days_overdue = $due_date->diff($now)->days;
-
-    // To prevent spamming, we need to track if notifications have been sent.
-    // We will add a field for this, but for now, we'll assume it doesn't exist and just send.
-    // A better implementation would check a custom field on the transaction entity.
-
-    if ($days_overdue >= 30) {
-      // To avoid processing multiple times, check a flag on the transaction.
-      // Let's assume a field `field_library_30day_processed` (boolean).
-      if ($transaction->hasField('field_library_30day_processed') && $transaction->get('field_library_30day_processed')->value) {
-        continue;
+      if ($due_date < $due_soon_threshold) {
+        // Due within 24 hours.
+        if ($config->get('enable_due_soon_notifications')) {
+          if ($transaction->hasField('field_library_due_soon_notified') && !$transaction->get('field_library_due_soon_notified')->value) {
+            _lending_library_send_due_soon_email($transaction);
+          }
+        }
       }
-      _lending_library_process_30_day_overdue($transaction);
     }
     else {
-      // To avoid spamming, check a flag.
-      // Let's assume a field `field_library_overdue_notified` (boolean).
-      if ($transaction->hasField('field_library_overdue_notified') && $transaction->get('field_library_overdue_notified')->value) {
-        continue;
+      // Overdue.
+      if ($config->get('enable_overdue_notifications')) {
+        $days_overdue = $due_date->diff($now)->days;
+
+        if ($days_overdue >= 30) {
+          // To avoid processing multiple times, check a flag on the transaction.
+          if ($transaction->hasField('field_library_30day_processed') && $transaction->get('field_library_30day_processed')->value) {
+            continue;
+          }
+          _lending_library_process_30_day_overdue($transaction);
+        }
+        else {
+          // To avoid spamming, check a flag.
+          if ($transaction->hasField('field_library_overdue_notified') && $transaction->get('field_library_overdue_notified')->value) {
+            continue;
+          }
+          _lending_library_send_overdue_email($transaction);
+        }
       }
-      _lending_library_send_overdue_email($transaction);
     }
   }
 
@@ -1249,7 +1269,8 @@ function _lending_library_send_issue_email(EntityInterface $transaction_entity) 
     'item_url' => $item->toUrl('canonical', ['absolute' => TRUE])->toString(),
   ];
 
-  $to = \Drupal::config('system.site')->get('mail') ?: LENDING_LIBRARY_STAFF_EMAIL;
+  $config = \Drupal::config('lending_library.settings');
+  $to = $config->get('email_staff_address') ?: \Drupal::config('system.site')->get('mail');
   $from = \Drupal::config('system.site')->get('mail');
 
   $result = \Drupal::service('plugin.manager.mail')->mail(
@@ -1290,6 +1311,8 @@ function lending_library_mail($key, &$message, $params) {
   $issue_intro     = $cfg->get('email_issue_notice_intro') ?: '';
 
   // New templates
+  $due_soon_subject = $cfg->get('email_due_soon_subject') ?: 'Your borrowed tool is due soon';
+  $due_soon_body = $cfg->get('email_due_soon_body') ?: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees.";
   $overdue_subject = $cfg->get('email_overdue_subject') ?: 'Your borrowed tool is overdue';
   $overdue_body = $cfg->get('email_overdue_body') ?: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is now overdue. Please return it as soon as possible.";
   $overdue_30_day_subject = $cfg->get('email_overdue_30_day_subject') ?: 'Charge for unreturned library tool';
@@ -1386,6 +1409,7 @@ function lending_library_mail($key, &$message, $params) {
       break;
     }
 
+    case 'due_soon':
     case 'overdue':
     case 'overdue_30_day':
     case 'condition_charge':
@@ -1396,7 +1420,11 @@ function lending_library_mail($key, &$message, $params) {
             '[payment_link]' => $params['payment_link'] ?? '',
         ];
 
-        if ($key === 'overdue') {
+        if ($key === 'due_soon') {
+            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $due_soon_subject);
+            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $due_soon_body);
+        }
+        elseif ($key === 'overdue') {
             $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_subject);
             $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_body);
         }

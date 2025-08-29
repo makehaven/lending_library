@@ -2,3 +2,8 @@ loan_terms_html: '<div class="lending-library-agreement"><h4>Borrowing Member Af
 email_checkout_footer: 'Please treat our tools with care. — MakeHaven Team'
 email_return_body: 'Thanks — your return has been recorded.'
 email_issue_notice_intro: 'A member submitted an issue report.'
+email_staff_address: 'team@makehaven.org'
+enable_due_soon_notifications: true
+enable_overdue_notifications: true
+email_due_soon_subject: 'Your borrowed tool is due soon'
+email_due_soon_body: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees."
