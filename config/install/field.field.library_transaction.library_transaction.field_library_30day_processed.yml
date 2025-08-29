@@ -1,0 +1,20 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_30day_processed
+id: library_transaction.library_transaction.field_library_30day_processed
+bundle: library_transaction
+label: '30-day overdue processed'
+description: 'Indicates whether the 30-day overdue processing has been completed for this transaction.'
+required: false
+translatable: false
+default_value:
+  -
+    value: 0
+default_value_callback: ''
+settings:
+  on_label: 'On'
+  off_label: 'Off'
+field_type: boolean

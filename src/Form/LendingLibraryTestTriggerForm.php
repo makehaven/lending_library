@@ -73,6 +73,12 @@ class LendingLibraryTestTriggerForm extends FormBase {
       '#submit' => ['::process30DayOverdue'],
     ];
 
+    $form['actions']['send_due_soon'] = [
+      '#type' => 'submit',
+      '#value' => $this->t('Test: Send Due Soon Email'),
+      '#submit' => ['::sendDueSoonEmail'],
+    ];
+
     return $form;
   }
 
@@ -119,6 +125,25 @@ class LendingLibraryTestTriggerForm extends FormBase {
 
     _lending_library_process_30_day_overdue($transaction);
     $this->messenger()->addStatus($this->t('30-day overdue processing complete for transaction %id.', ['%id' => $transaction_id]));
+  }
+
+  /**
+   * Submit handler for the "Send Due Soon Email" button.
+   */
+  public function sendDueSoonEmail(array &$form, FormStateInterface $form_state) {
+    $transaction_id = $form_state->getValue('transaction_id');
+    $transaction = $this->entityTypeManager->getStorage('library_transaction')->load($transaction_id);
+
+    if (!$transaction) {
+      $this->messenger()->addError($this->t('Transaction not found.'));
+      return;
+    }
+
+    // Include the module file to ensure helper functions are available.
+    module_load_include('module', 'lending_library');
+
+    _lending_library_send_due_soon_email($transaction);
+    $this->messenger()->addStatus($this->t('Due soon email sent for transaction %id.', ['%id' => $transaction_id]));
   }
 
 }
