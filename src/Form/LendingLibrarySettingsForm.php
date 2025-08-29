@@ -88,6 +88,13 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#rows' => 3,
     ];
 
+    $form['email_settings']['email_staff_address'] = [
+      '#type' => 'email',
+      '#title' => $this->t('Staff notification email address'),
+      '#description' => $this->t('The email address to which staff notifications are sent.'),
+      '#default_value' => $config->get('email_staff_address') ?: '',
+    ];
+
     $form['email_settings']['overdue'] = [
       '#type' => 'details',
       '#title' => $this->t('Overdue Notification'),
@@ -161,6 +168,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       ->set('email_checkout_footer', $form_state->getValue('email_checkout_footer'))
       ->set('email_return_body', $form_state->getValue('email_return_body'))
       ->set('email_issue_notice_intro', $form_state->getValue('email_issue_notice_intro'))
+      ->set('email_staff_address', $form_state->getValue('email_staff_address'))
       ->set('email_overdue_subject', $form_state->getValue('email_overdue_subject'))
       ->set('email_overdue_body', $form_state->getValue('email_overdue_body'))
       ->set('email_overdue_30_day_subject', $form_state->getValue('email_overdue_30_day_subject'))
