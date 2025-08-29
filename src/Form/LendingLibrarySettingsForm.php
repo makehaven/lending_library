@@ -64,6 +64,18 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#open' => TRUE,
     ];
 
+    $form['email_settings']['enable_due_soon_notifications'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable "Due Soon" notifications'),
+      '#default_value' => $config->get('enable_due_soon_notifications'),
+    ];
+
+    $form['email_settings']['enable_overdue_notifications'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable "Overdue" notifications'),
+      '#default_value' => $config->get('enable_overdue_notifications'),
+    ];
+
     $form['email_settings']['email_checkout_footer'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Checkout email footer'),
@@ -165,6 +177,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     $config
       ->set('loan_period_days', $form_state->getValue('loan_period_days'))
       ->set('loan_terms_html', $form_state->getValue('loan_terms_html'))
+      ->set('enable_due_soon_notifications', $form_state->getValue('enable_due_soon_notifications'))
+      ->set('enable_overdue_notifications', $form_state->getValue('enable_overdue_notifications'))
       ->set('email_checkout_footer', $form_state->getValue('email_checkout_footer'))
       ->set('email_return_body', $form_state->getValue('email_return_body'))
       ->set('email_issue_notice_intro', $form_state->getValue('email_issue_notice_intro'))
