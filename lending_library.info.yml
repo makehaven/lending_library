@@ -15,3 +15,5 @@ dependencies:
   - drupal:options
   - drupal:link
   - drupal:field_permissions
+  - drupal:comment
+  - drupal:field_group

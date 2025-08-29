@@ -5,6 +5,8 @@ dependencies:
     - eck.eck_type.library_transaction.library_transaction
     - field.storage.library_transaction.field_library_overdue_notified
 id: library_transaction.library_transaction.field_library_overdue_notified
+field_name: field_library_overdue_notified
+entity_type: library_transaction
 bundle: library_transaction
 label: 'Overdue notification sent'
 description: 'Indicates whether the overdue notification has been sent for this transaction.'
