@@ -1,0 +1,19 @@
+uuid: 7faee271-68ac-4747-8659-7a5855f20651
+langcode: und
+status: true
+dependencies:
+  module:
+    - link
+    - node
+id: node.field_library_item_resource
+field_name: field_library_item_resource
+entity_type: node
+type: link
+settings: {  }
+module: link
+locked: false
+cardinality: -1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

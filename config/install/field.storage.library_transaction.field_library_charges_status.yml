@@ -1,0 +1,55 @@
+uuid: 38b2c80c-ce5b-4ab1-b3d7-b149630a6a87
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+    - options
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: library_transaction.field_library_charges_status
+field_name: field_library_charges_status
+entity_type: library_transaction
+type: list_string
+settings:
+  allowed_values:
+    -
+      value: none
+      label: 'No charges due'
+    -
+      value: late_pending
+      label: 'Late fee pending'
+    -
+      value: late_invoiced
+      label: 'Late fee invoiced'
+    -
+      value: late_paid
+      label: 'Late fee paid'
+    -
+      value: damage_invoiced
+      label: 'Damage fee invoiced'
+    -
+      value: damage_paid
+      label: 'Damage fee paid'
+    -
+      value: replacement_invoiced
+      label: 'Replacement fee invoiced'
+    -
+      value: replacement_paid
+      label: 'Replacement fee paid'
+    -
+      value: waived
+      label: 'Fees waived'
+    -
+      value: payment_error
+      label: 'Payment processing error'
+  allowed_values_function: ''
+module: options
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

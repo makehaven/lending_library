@@ -1,0 +1,12 @@
+uuid: 46b9e6fb-6637-4a25-9bbc-d28457ace042
+langcode: en
+status: true
+dependencies: {  }
+_core:
+  default_config_hash: JLLbCd2GolVrkuoovCXtK4z_Xp5aoaZpqdvlKJx-P1I
+id: battery
+label: Battery
+created: true
+changed: false
+uid: false
+title: false
