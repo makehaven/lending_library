@@ -1,0 +1,19 @@
+uuid: 4d2b2c3a-6f3b-4c7a-9b7e-3f8d3c5a7b6a
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - text
+id: library_transaction.field_paypal_ipn_log
+field_name: field_paypal_ipn_log
+entity_type: library_transaction
+type: text_long
+settings: {  }
+module: text
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

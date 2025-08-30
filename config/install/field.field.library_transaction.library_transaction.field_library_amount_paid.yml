@@ -1,0 +1,22 @@
+uuid: 9d1eeb9d-5c01-4490-9e26-bd14042cb555
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_library_amount_paid
+id: library_transaction.library_transaction.field_library_amount_paid
+field_name: field_library_amount_paid
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Amount Paid'
+description: ''
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  min: null
+  max: null
+  prefix: ''
+  suffix: ''

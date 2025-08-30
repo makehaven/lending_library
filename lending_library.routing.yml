@@ -83,3 +83,25 @@ lending_library.battery_return:
   requirements:
     _permission: 'create library_transaction entities'
     battery: '\d+'
+
+lending_library.paypal_ipn_listener:
+  path: '/lending-library/paypal-ipn-listener'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\PaypalIpnController::ipnListener'
+    _title: 'PayPal IPN Listener'
+  methods: [POST]
+  requirements:
+    _access: 'TRUE'
+
+lending_library.damage_charge_confirm:
+  path: '/library-transaction/{library_transaction}/confirm-damage-charge'
+  defaults:
+    _form: '\Drupal\lending_library\Form\DamageChargeConfirmForm'
+    _title: 'Confirm Damage Charge'
+  requirements:
+    _permission: 'administer library_transaction entities'
+    library_transaction: \d+
+  options:
+    parameters:
+      library_transaction:
+        type: entity:library_transaction

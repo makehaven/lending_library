@@ -1,0 +1,24 @@
+uuid: 516f8468-f9b2-43a2-8365-3c0f8bc5f091
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - field_permissions
+third_party_settings:
+  field_permissions:
+    permission_type: custom
+id: library_transaction.field_library_amount_paid
+field_name: field_library_amount_paid
+entity_type: library_transaction
+type: decimal
+settings:
+  precision: 10
+  scale: 2
+module: core
+locked: false
+cardinality: 1
+translatable: true
+indexes: {}
+persist_with_no_fields: false
+custom_storage: false
