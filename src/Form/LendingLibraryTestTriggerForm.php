@@ -9,6 +9,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Drupal\Core\Mail\MailManagerInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Url;
 
 /**
  * Provides a form to test sending any of the module's emails with dummy data.
@@ -76,6 +77,13 @@ class LendingLibraryTestTriggerForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+    $settings_url = Url::fromRoute('lending_library.settings')->toString();
+    $form['warning'] = [
+      '#markup' => $this->t('<div class="messages messages--warning">For payment links to be generated in test emails, a valid email address must be saved in the <a href=":settings_url">Lending Library Settings</a> page.</div>', [
+        ':settings_url' => $settings_url,
+      ]),
+    ];
+
     $form['explanation'] = [
       '#markup' => $this->t('<p>This form allows you to send a test version of any email template to an address you specify. The email will be generated with dummy data.</p>'),
     ];
