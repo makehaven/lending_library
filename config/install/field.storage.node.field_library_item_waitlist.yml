@@ -1,0 +1,20 @@
+uuid: 4d28c946-b1b8-4c9c-851f-5a5d1a5a8f4c
+langcode: en
+status: true
+dependencies:
+  module:
+    - node
+    - user
+id: node.field_library_item_waitlist
+field_name: field_library_item_waitlist
+entity_type: node
+type: entity_reference
+settings:
+  target_type: user
+module: core
+locked: false
+cardinality: -1
+translatable: false
+indexes: { }
+persist_with_no_fields: false
+custom_storage: false

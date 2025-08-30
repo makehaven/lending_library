@@ -18,6 +18,7 @@ define('LENDING_LIBRARY_ITEM_NODE_TYPE', 'library_item');
 
 define('LENDING_LIBRARY_ITEM_STATUS_FIELD', 'field_library_item_status');
 define('LENDING_LIBRARY_ITEM_BORROWER_FIELD', 'field_library_item_borrower');
+define('LENDING_LIBRARY_ITEM_WAITLIST_FIELD', 'field_library_item_waitlist');
 define('LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD', 'field_library_item_uses_battery');
 define('LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD', 'field_library_item_replacement_v');
 
@@ -600,6 +601,17 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
         if (!$charge_applied) {
           _lending_library_send_return_email($transaction_entity);
         }
+
+        if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
+          $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->referencedEntities();
+          $next_user = reset($waitlist_users);
+          if ($next_user) {
+            _lending_library_send_email_by_key($transaction_entity, 'waitlist_notification', ['next_user' => $next_user]);
+            $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->removeItem(0);
+            $library_item_node->save();
+          }
+        }
+
         $form_state->setRedirectUrl(Url::fromUri('internal:/library'));
         break;
   
@@ -954,9 +966,15 @@ function _lending_library_send_overdue_email(EntityInterface $transaction) {
  * Helper to send email based on a key.
  */
 function _lending_library_send_email_by_key(EntityInterface $transaction, $key, $extra_params = []) {
-    $borrower_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD);
-    if ($borrower_ref->isEmpty()) return;
-    $borrower_user = User::load($borrower_ref->target_id);
+    if ($key === 'waitlist_notification' && isset($extra_params['next_user'])) {
+      $borrower_user = $extra_params['next_user'];
+    }
+    else {
+      $borrower_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD);
+      if ($borrower_ref->isEmpty()) return;
+      $borrower_user = User::load($borrower_ref->target_id);
+    }
+
     if (!$borrower_user || !$borrower_user->getEmail()) return;
 
     $item_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD);
@@ -1064,6 +1082,14 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
       if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $item_details['borrower_uid'] == $current_user->id()) {
         $url = Url::fromRoute('lending_library.return_form', ['node' => $library_item_node->id()]);
         $links['return'] = ['#type' => 'link', '#title' => t('Return This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
+      }
+      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
+        $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
+        $user_ids = array_column($waitlist_users, 'target_id');
+        if (!in_array($current_user->id(), $user_ids)) {
+          $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
+          $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
+        }
       }
       if ($item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_RETIRED) {
         $url = Url::fromRoute('lending_library.issue_form', ['node' => $library_item_node->id()]);
@@ -1319,6 +1345,8 @@ function lending_library_mail($key, &$message, $params) {
   $overdue_30_day_body = $cfg->get('email_overdue_30_day_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' is now 30 days overdue. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]";
   $condition_charge_subject = $cfg->get('email_condition_charge_subject') ?: 'Charge for tool damage or missing parts';
   $condition_charge_body = $cfg->get('email_condition_charge_body') ?: "Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]";
+  $waitlist_notification_subject = $cfg->get('email_waitlist_notification_subject') ?: 'A tool you are waiting for is now available';
+  $waitlist_notification_body = $cfg->get('email_waitlist_notification_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout.";
 
 
   switch ($key) {
@@ -1436,6 +1464,14 @@ function lending_library_mail($key, &$message, $params) {
             $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $condition_charge_subject);
             $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $condition_charge_body);
         }
+        break;
+    case 'waitlist_notification':
+        $replacements = [
+            '[tool_name]' => $params['tool_name'] ?? '',
+            '[borrower_name]' => $params['borrower_name'] ?? '',
+        ];
+        $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $waitlist_notification_subject);
+        $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $waitlist_notification_body);
         break;
   }
 }
