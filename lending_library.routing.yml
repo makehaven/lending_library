@@ -46,7 +46,7 @@ lending_library.settings:
     _form: '\Drupal\lending_library\Form\LendingLibrarySettingsForm'
     _title: 'Lending Library settings'
   requirements:
-    _permission: 'administer site configuration'
+    _permission: 'administer lending library configuration'
 
 lending_library.test_form:
   path: '/admin/config/makehaven/lending-library/test'

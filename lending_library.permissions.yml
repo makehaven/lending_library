@@ -15,3 +15,7 @@ edit own library_transaction entities:
 delete own library_transaction entities:
   title: 'Delete own Library Transaction entities'
   description: 'Allows users to delete their own Library Transaction entities.'
+
+administer lending library configuration:
+  title: 'Administer Lending Library configuration'
+  description: 'Allows users to access the Lending Library configuration page.'
