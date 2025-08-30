@@ -37,12 +37,20 @@ class LendingLibraryTestTriggerForm extends FormBase {
   protected $configFactory;
 
   /**
+   * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
+
+  /**
    * Constructs a new LendingLibraryTestTriggerForm object.
    */
-  public function __construct(MailManagerInterface $mail_manager, LanguageManagerInterface $language_manager, ConfigFactoryInterface $config_factory) {
+  public function __construct(MailManagerInterface $mail_manager, LanguageManagerInterface $language_manager, ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager) {
     $this->mailManager = $mail_manager;
     $this->languageManager = $language_manager;
     $this->configFactory = $config_factory;
+    $this->entityTypeManager = $entity_type_manager;
   }
 
   /**
@@ -52,7 +60,8 @@ class LendingLibraryTestTriggerForm extends FormBase {
     return new static(
       $container->get('plugin.manager.mail'),
       $container->get('language_manager'),
-      $container->get('config.factory')
+      $container->get('config.factory'),
+      $container->get('entity_type.manager')
     );
   }
 
@@ -113,26 +122,28 @@ class LendingLibraryTestTriggerForm extends FormBase {
     // Include the module file to ensure helper functions are available.
     module_load_include('module', 'lending_library');
 
-    // Create a dummy transaction-like object.
-    $transaction = new \stdClass();
-    $transaction->id = 999;
-    $transaction->get = function($field_name) {
-        $fields = [
-            'field_library_item' => (object) [
-                'entity' => (object) [
-                    'label' => 'Test Tool 123',
-                ],
-            ],
-            'field_library_borrower' => (object) [
-                'target_id' => 1,
-            ],
-            'field_library_amount_due' => (object) ['value' => 25.50],
-        ];
-        return $fields[$field_name] ?? NULL;
-    };
+    // Get a random tool to make the test data more realistic.
+    $query = $this->entityTypeManager->getStorage('node')->getQuery()
+      ->condition('type', 'library_item')
+      ->condition('status', 1)
+      ->accessCheck(FALSE);
+    $nids = $query->execute();
+    $tool_name = 'Sample Tool';
+    if (!empty($nids)) {
+      $random_nid = $nids[array_rand($nids)];
+      $tool = $this->entityTypeManager->getStorage('node')->load($random_nid);
+      if ($tool) {
+        $tool_name = $tool->label();
+      }
+    }
 
-    // Create dummy params.
+    // Use the current user as the borrower.
+    $borrower_name = $this->currentUser()->getDisplayName();
+
+    // Create params with a mix of real and dummy data.
     $params = [
+        'tool_name' => $tool_name,
+        'borrower_name' => $borrower_name,
         'amount_due' => 25.50,
         'tool_replacement_charge' => 150.00,
         'unreturned_batteries_charge' => 25.00,
@@ -142,33 +153,11 @@ class LendingLibraryTestTriggerForm extends FormBase {
         'notes' => 'This is a test issue description.',
         'reporter' => 'Test Reporter',
         'item_url' => 'https://example.com/node/1',
+        'transaction_id' => 999,
     ];
 
-    // The send email function needs a real user object for name and email.
-    // We'll create a dummy one and override the email with the one from the form.
-    $dummy_user = new \stdClass();
-    $dummy_user->getDisplayName = function() { return 'Test Borrower'; };
-    $dummy_user->getEmail = function() use ($recipient_email) { return $recipient_email; };
-    $dummy_user->getPreferredLangcode = function() { return $this->languageManager->getDefaultLanguage()->getId(); };
-
-    $params['borrower_user'] = $dummy_user;
-
-    // The function expects an entity, so we need to mock that part.
-    // We'll create a mock that can return the dummy user.
-    $mock_transaction = new \stdClass();
-    $mock_transaction->get = function ($field) use ($dummy_user) {
-      if ($field === 'field_library_borrower') {
-        return (object)['entity' => $dummy_user];
-      }
-      if ($field === 'field_library_item') {
-        return (object)['entity' => (object)['label' => 'Test Tool 123']];
-      }
-      return (object)['value' => 0];
-    };
-
-    // We can't easily mock the User::load call inside the helper.
-    // So, we'll call the mail manager directly, which is what the helper does.
-    $params['transaction_id'] = 999;
+    // We call the mail manager directly because we are not working with a real
+    // transaction entity, which the helper function `_lending_library_send_email_by_key` expects.
     $site_from = $this->configFactory->get('system.site')->get('mail');
     $result = $this->mailManager->mail(
         'lending_library',

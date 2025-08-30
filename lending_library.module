@@ -78,7 +78,7 @@ function _lending_library_get_item_details(NodeInterface $library_item_node = NU
 
   $borrower_uid = NULL;
   if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_BORROWER_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_BORROWER_FIELD)->isEmpty()) {
-    $borrower_uid = $library_item_node->get(LENDING_LIBRARY_ITEM_BORROWER_FIELD)->target_id;
+    $borrower_uid = (int) $library_item_node->get(LENDING_LIBRARY_ITEM_BORROWER_FIELD)->target_id;
   }
 
   $replacement_value = NULL;
@@ -1163,7 +1163,7 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
         $url = Url::fromRoute('lending_library.return_form', ['node' => $library_item_node->id()]);
         $links['return'] = ['#type' => 'link', '#title' => t('Return This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
       }
-      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
+      if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_REPAIR, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
         $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
         $user_ids = array_column($waitlist_users, 'target_id');
         if (in_array($current_user->id(), $user_ids)) {
@@ -1172,7 +1172,7 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
         }
         else {
           // Do not show "Get in Line" to the current borrower of the item.
-          if ($item_details['borrower_uid'] != $current_user->id()) {
+          if ($item_details['borrower_uid'] !== $current_user->id()) {
             $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
             $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
           }
