@@ -678,6 +678,15 @@ function lending_library_entity_insert(EntityInterface $entity) {
         $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, ['target_id' => $transaction_borrower_uid]);
         $save_item_node = TRUE;
 
+        // If the borrower was on the waitlist, remove them.
+        if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
+          $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
+          $user_ids = array_column($waitlist_users, 'target_id');
+          if (($key = array_search($transaction_borrower_uid, $user_ids)) !== false) {
+            $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->removeItem($key);
+          }
+        }
+
         // Update selected batteries to "borrowed".
         if ($entity->hasField(LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD)
           && !$entity->get(LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD)->isEmpty()) {
@@ -968,6 +977,7 @@ function _lending_library_send_overdue_email(EntityInterface $transaction) {
 function _lending_library_send_email_by_key(EntityInterface $transaction, $key, $extra_params = []) {
     if ($key === 'waitlist_notification' && isset($extra_params['next_user'])) {
       $borrower_user = $extra_params['next_user'];
+      $extra_params['borrower_name'] = $borrower_user->getDisplayName();
     }
     else {
       $borrower_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD);
@@ -1086,7 +1096,12 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
       if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
         $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
         $user_ids = array_column($waitlist_users, 'target_id');
-        if (!in_array($current_user->id(), $user_ids)) {
+        if (in_array($current_user->id(), $user_ids)) {
+          $url = Url::fromRoute('lending_library.waitlist_remove', ['node' => $library_item_node->id()]);
+          $links['waitlist'] = ['#type' => 'link', '#title' => t('Leave Waitlist'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]
+        ];
+        }
+        else {
           $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
           $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
         }

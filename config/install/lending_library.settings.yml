@@ -7,3 +7,5 @@ enable_due_soon_notifications: true
 enable_overdue_notifications: true
 email_due_soon_subject: 'Your borrowed tool is due soon'
 email_due_soon_body: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees."
+email_waitlist_notification_subject: 'A tool you are waiting for is now available'
+email_waitlist_notification_body: "Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout."

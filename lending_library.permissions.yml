@@ -16,6 +16,6 @@ delete own library_transaction entities:
   title: 'Delete own Library Transaction entities'
   description: 'Allows users to delete their own Library Transaction entities.'
 
-'get in line for library items':
+get in line for library items:
   title: 'Get in line for library items'
   description: 'Allows users to add themselves to the waitlist for a library item.'

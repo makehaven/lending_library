@@ -65,6 +65,15 @@ lending_library.waitlist_add:
     _permission: 'get in line for library items'
     node: \d+
 
+lending_library.waitlist_remove:
+  path: '/library/item/{node}/waitlist/remove'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\WaitlistController::remove'
+    _title: 'Leave Waitlist'
+  requirements:
+    _permission: 'get in line for library items'
+    node: \d+
+
 
 lending_library.battery_return:
   path: '/library/battery/{battery}/return'

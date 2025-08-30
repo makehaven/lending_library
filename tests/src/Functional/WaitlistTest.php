@@ -61,6 +61,7 @@ class WaitlistTest extends BrowserTestBase {
 
     $this->waitlister = $this->drupalCreateUser([
         'get in line for library items',
+        'create library_transaction entities',
     ]);
 
     // Create a library item.
@@ -97,6 +98,21 @@ class WaitlistTest extends BrowserTestBase {
     // Verify that the user is on the waitlist.
     $this->assertSession()->pageTextContains('You have been added to the waitlist for Test Library Item.');
 
+    // Verify that the "Leave Waitlist" button is visible.
+    $this->assertSession()->linkExists('Leave Waitlist');
+
+    // Click the "Leave Waitlist" button.
+    $this->clickLink('Leave Waitlist');
+
+    // Verify that the user is removed from the waitlist.
+    $this->assertSession()->pageTextContains('You have been removed from the waitlist for Test Library Item.');
+
+    // Verify that the "Get in Line" button is visible again.
+    $this->assertSession()->linkExists('Get in Line');
+
+    // Click the "Get in Line" button again.
+    $this->clickLink('Get in Line');
+
     // Log in as the borrower again.
     $this->drupalLogin($this->borrower);
 
@@ -105,7 +121,8 @@ class WaitlistTest extends BrowserTestBase {
     $this->submitForm([], 'Confirm Return');
 
     // Verify that the user received an email.
-    $this->assertMailSent();
+    $this->assertMail('subject', 'A tool you are waiting for is now available');
+    $this->assertMail('body', 'The tool \'Test Library Item\' you were waiting for has been returned and is now available for checkout.');
 
     // Log in as the waitlister again.
     $this->drupalLogin($this->waitlister);
@@ -113,6 +130,14 @@ class WaitlistTest extends BrowserTestBase {
     // Verify that the "Withdraw This Item" button is visible.
     $this->drupalGet('node/' . $this->libraryItem->id());
     $this->assertSession()->linkExists('Withdraw This Item');
+
+    // Borrow the item as the waitlister.
+    $this->clickLink('Withdraw This Item');
+    $this->submitForm([], 'Confirm Withdrawal & Agree');
+
+    // Verify that the waitlister is removed from the waitlist.
+    $this->drupalGet('node/' . $this->libraryItem->id());
+    $this->assertSession()->linkNotExists('Leave Waitlist');
   }
 
 }
