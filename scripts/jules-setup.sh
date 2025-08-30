@@ -1,37 +1,90 @@
 #!/bin/bash
-# scripts/jules-setup.sh
+# Provision Jules (Docker + Drupal 10) and install the Lending Library module from the repo.
+set -e
 
-set -euo pipefail
+echo "--- 1) docker-compose.yml (AWS ECR mirrors to avoid Hub limits) ---"
+cat <<'EOF' > docker-compose.yml
+services:
+  db:
+    image: public.ecr.aws/docker/library/postgres:15-alpine
+    environment:
+      POSTGRES_DB: drupal
+      POSTGRES_USER: drupal
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/postgresql/data
 
-echo "--- Starting Docker services ---"
+  drupal:
+    image: public.ecr.aws/docker/library/drupal:10-fpm-alpine
+    depends_on:
+      - db
+    volumes:
+      - ./d10:/var/www/html              # project docroot (host)
+      - .:/var/www/module_source         # module source (host)
+volumes:
+  db_data:
+EOF
+
+echo "--- 2) Start services ---"
+mkdir -p d10
 sudo docker compose up -d
-sleep 15
 
-echo "--- Install Composer in container ---"
-sudo docker compose exec -T drupal bash -lc 'apt-get update && apt-get install -y curl git unzip mariadb-client && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer && composer --version'
+echo "--- 3) Install Composer + pdo_pgsql + create Drupal 10 project (as root) ---"
+sudo docker compose exec -T --user root drupal sh -lc '
+  set -e
+  apk add --no-cache curl git unzip postgresql-dev $PHPIZE_DEPS
+  docker-php-ext-install pdo_pgsql
+  docker-php-ext-enable pdo_pgsql
+  curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+  mkdir -p /var/www/.composer && chown -R www-data:www-data /var/www/.composer
+  # PIN to Drupal 10
+  COMPOSER_HOME=/var/www/.composer composer create-project "drupal/recommended-project:^10" /var/www/html --no-interaction --ignore-platform-reqs
+  chown -R www-data:www-data /var/www/html
+'
 
-echo "--- Create Drupal project ---"
-sudo docker compose exec -T drupal bash -lc 'mkdir -p /opt/drupal && [ -f /opt/drupal/composer.json ] || composer create-project drupal/recommended-project:^10.3 /opt/drupal'
+echo "--- 4) Wait for DB ---"
+sleep 30
 
-echo "--- Point Apache docroot at /opt/drupal/web ---"
-sudo docker compose exec -T drupal bash -lc 'rm -rf /var/www/html && ln -s /opt/drupal/web /var/www/html'
+echo "--- 5) Locate module + configure Composer path repo ---"
+INFO_FILE_PATH=$(sudo docker compose exec -T drupal sh -lc \
+  'find /var/www/module_source -type f -name "lending_library.info.yml" -print -quit')
 
-echo "--- Symlink this repo as a custom module ---"
-sudo docker compose exec -T drupal bash -lc 'mkdir -p /opt/drupal/web/modules/custom && ln -sfn /opt/project /opt/drupal/web/modules/custom/lending_library'
+if [ -z "$INFO_FILE_PATH" ]; then
+  echo "Error: lending_library.info.yml not found." >&2
+  exit 1
+fi
 
-echo "--- Require Drush and deps ---"
-sudo docker compose exec -T drupal bash -lc 'cd /opt/drupal && composer require drush/drush:^13 drupal/eck drupal/field_permissions drupal/field_group -W'
+MODULE_PATH=$(sudo docker compose exec -T drupal sh -lc 'dirname "$1"' _ "$INFO_FILE_PATH")
+echo "Module path: $MODULE_PATH"
 
-echo "--- Install Drupal site ---"
-sudo docker compose exec -T drupal bash -lc "/opt/drupal/vendor/bin/drush sql-drop -y && /opt/drupal/vendor/bin/drush si standard \
-  --db-url='mysql://drupal10:drupal10@db:3306/drupal10' \
-  --site-name='Lending Library Test' \
-  --account-name=admin --account-pass=admin -y"
+# Allow git to use the mounted directory
+sudo docker compose exec -T drupal sh -lc 'git config --global --add safe.directory /var/www/module_source'
 
-echo "--- Enable dependencies ---"
-sudo docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en -y eck field_permissions field_group comment'
+# Register path repo
+sudo docker compose exec -T drupal sh -lc \
+  'composer config --file=/var/www/html/composer.json repositories.lending_library \
+   "{\"type\":\"path\",\"url\":\"'"$MODULE_PATH"'\"}"'
 
-echo "--- Enable custom module ---"
-sudo docker compose exec -T drupal bash -lc '/opt/drupal/vendor/bin/drush en lending_library -y'
+echo "--- 6) Install Drush ---"
+sudo docker compose exec -T drupal sh -lc \
+  'COMPOSER_HOME=/var/www/.composer composer require drush/drush:^13 --working-dir=/var/www/html --no-interaction'
 
-echo "--- Done ---"
+echo "--- 7) Require module (and deps) ---"
+sudo docker compose exec -T drupal sh -lc \
+  'COMPOSER_HOME=/var/www/.composer composer require -W makehaven/lending_library:*@dev --working-dir=/var/www/html --no-interaction'
+
+echo "--- 8) Install Drupal via Drush ---"
+sudo docker compose exec -T drupal sh -lc \
+  '/var/www/html/vendor/bin/drush site:install standard \
+    --db-url=pgsql://drupal:password@db:5432/drupal \
+    --site-name="Lending Library Test" \
+    --account-name=admin \
+    --account-pass=admin -y'
+
+echo "--- 9) Enable module ---"
+sudo docker compose exec -T drupal sh -lc \
+  '/var/www/html/vendor/bin/drush en lending_library -y'
+
+echo "--- 10) Fix permissions (as root) ---"
+sudo docker compose exec -T --user root drupal sh -lc \
+  'chown -R www-data:www-data /var/www/html/web/sites/default'
