@@ -2,6 +2,10 @@
 # Provision Jules (Docker + Drupal 10) and install the Lending Library module from the repo.
 set -e
 
+echo "--- 0) Clean up previous environment ---"
+rm -rf d10
+sudo docker compose down -v --remove-orphans
+
 echo "--- 1) docker-compose.yml (AWS ECR mirrors to avoid Hub limits) ---"
 cat <<'EOF' > docker-compose.yml
 services:
@@ -73,6 +77,10 @@ echo "--- 7) Require module (and deps) ---"
 sudo docker compose exec -T drupal sh -lc \
   'COMPOSER_HOME=/var/www/.composer composer require -W makehaven/lending_library:*@dev --working-dir=/var/www/html --no-interaction'
 
+echo "--- 7.5) Install PHPUnit ---"
+sudo docker compose exec -T drupal sh -lc \
+  'cd /var/www/html && COMPOSER_HOME=/var/www/.composer composer require --dev phpunit/phpunit --with-all-dependencies'
+
 echo "--- 8) Install Drupal via Drush ---"
 sudo docker compose exec -T drupal sh -lc \
   '/var/www/html/vendor/bin/drush site:install standard \
@@ -85,6 +93,10 @@ echo "--- 9) Enable module ---"
 sudo docker compose exec -T drupal sh -lc \
   '/var/www/html/vendor/bin/drush en lending_library -y'
 
+echo "--- 9.5) Clear cache ---"
+sudo docker compose exec -T drupal sh -lc \
+  '/var/www/html/vendor/bin/drush cache:rebuild'
+
 echo "--- 10) Fix permissions (as root) ---"
 sudo docker compose exec -T --user root drupal sh -lc \
-  'chown -R www-data:www-data /var/www/html/web/sites/default'
+  'chown -R www-data:www-data /var/www/html'
