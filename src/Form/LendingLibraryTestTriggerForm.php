@@ -6,24 +6,43 @@ use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Mail\MailManagerInterface;
+use Drupal\Core\Language\LanguageManagerInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
 
 /**
- * Provides a form to test overdue notifications.
+ * Provides a form to test sending any of the module's emails with dummy data.
  */
 class LendingLibraryTestTriggerForm extends FormBase {
 
   /**
-   * The entity type manager.
+   * The mail manager.
    *
-   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   * @var \Drupal\Core\Mail\MailManagerInterface
    */
-  protected $entityTypeManager;
+  protected $mailManager;
+
+  /**
+   * The language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface
+   */
+  protected $languageManager;
+
+  /**
+   * The config factory.
+   *
+   * @var \Drupal\Core\Config\ConfigFactoryInterface
+   */
+  protected $configFactory;
 
   /**
    * Constructs a new LendingLibraryTestTriggerForm object.
    */
-  public function __construct(EntityTypeManagerInterface $entity_type_manager) {
-    $this->entityTypeManager = $entity_type_manager;
+  public function __construct(MailManagerInterface $mail_manager, LanguageManagerInterface $language_manager, ConfigFactoryInterface $config_factory) {
+    $this->mailManager = $mail_manager;
+    $this->languageManager = $language_manager;
+    $this->configFactory = $config_factory;
   }
 
   /**
@@ -31,7 +50,9 @@ class LendingLibraryTestTriggerForm extends FormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('entity_type.manager')
+      $container->get('plugin.manager.mail'),
+      $container->get('language_manager'),
+      $container->get('config.factory')
     );
   }
 
@@ -46,37 +67,37 @@ class LendingLibraryTestTriggerForm extends FormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    $transaction_list_url = \Drupal\Core\Url::fromUri('internal:/admin/content/library_transaction')->toString();
-    $link = '<a href="' . $transaction_list_url . '" target="_blank">Find Transactions</a>';
+    $form['explanation'] = [
+      '#markup' => $this->t('<p>This form allows you to send a test version of any email template to an address you specify. The email will be generated with dummy data.</p>'),
+    ];
 
-    $form['transaction_id'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Library Transaction ID'),
-      '#description' => $this->t('Enter the ID of the "withdraw" transaction you want to test. (@link)', ['@link' => $link]),
+    $form['email_key'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Email Template to Test'),
+      '#options' => [
+        'due_soon' => $this->t('Due Soon'),
+        'overdue_late_fee' => $this->t('Overdue (Late Fee)'),
+        'overdue_30_day' => $this->t('Non-Return Charge'),
+        'condition_charge' => $this->t('Condition (Damage) Charge'),
+        'checkout_confirmation' => $this->t('Checkout Confirmation'),
+        'return_confirmation' => $this->t('Return Confirmation'),
+        'waitlist_notification' => $this->t('Waitlist Notification'),
+        'issue_report_notice' => $this->t('Issue Report (to Staff)'),
+      ],
       '#required' => TRUE,
-      '#min' => 1,
     ];
 
-    $form['actions'] = [
-      '#type' => 'actions',
+    $form['recipient_email'] = [
+      '#type' => 'email',
+      '#title' => $this->t('Recipient Email Address'),
+      '#description' => $this->t('The email address to send the test email to.'),
+      '#required' => TRUE,
     ];
 
-    $form['actions']['send_overdue'] = [
+    $form['actions'] = ['#type' => 'actions'];
+    $form['actions']['submit'] = [
       '#type' => 'submit',
-      '#value' => $this->t('Test: Send Late Fee Email'),
-      '#submit' => ['::sendOverdueEmail'],
-    ];
-
-    $form['actions']['process_30_day'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Test: Process Non-Return Charge & Send Email'),
-      '#submit' => ['::process30DayOverdue'],
-    ];
-
-    $form['actions']['send_due_soon'] = [
-      '#type' => 'submit',
-      '#value' => $this->t('Test: Send Due Soon Email'),
-      '#submit' => ['::sendDueSoonEmail'],
+      '#value' => $this->t('Send Test Email'),
     ];
 
     return $form;
@@ -86,69 +107,85 @@ class LendingLibraryTestTriggerForm extends FormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    // This is not used, as each button has its own submit handler.
-  }
-
-  /**
-   * Submit handler for the "Send Late Fee Email" button.
-   */
-  public function sendOverdueEmail(array &$form, FormStateInterface $form_state) {
-    $transaction_id = $form_state->getValue('transaction_id');
-    $transaction = $this->entityTypeManager->getStorage('library_transaction')->load($transaction_id);
-
-    if (!$transaction) {
-      $this->messenger()->addError($this->t('Transaction not found.'));
-      return;
-    }
+    $email_key = $form_state->getValue('email_key');
+    $recipient_email = $form_state->getValue('recipient_email');
 
     // Include the module file to ensure helper functions are available.
     module_load_include('module', 'lending_library');
 
-    // The old generic overdue email was removed. We now test the new late fee email.
-    // We pass a dummy amount for testing purposes.
-    _lending_library_send_email_by_key($transaction, 'overdue_late_fee', ['amount_due' => 10.00]);
-    $this->messenger()->addStatus($this->t('Late fee email sent for transaction %id.', ['%id' => $transaction_id]));
-  }
+    // Create a dummy transaction-like object.
+    $transaction = new \stdClass();
+    $transaction->id = 999;
+    $transaction->get = function($field_name) {
+        $fields = [
+            'field_library_item' => (object) [
+                'entity' => (object) [
+                    'label' => 'Test Tool 123',
+                ],
+            ],
+            'field_library_borrower' => (object) [
+                'target_id' => 1,
+            ],
+            'field_library_amount_due' => (object) ['value' => 25.50],
+        ];
+        return $fields[$field_name] ?? NULL;
+    };
 
-  /**
-   * Submit handler for the "Process Non-Return Charge" button.
-   */
-  public function process30DayOverdue(array &$form, FormStateInterface $form_state) {
-    $transaction_id = $form_state->getValue('transaction_id');
-    $transaction = $this->entityTypeManager->getStorage('library_transaction')->load($transaction_id);
+    // Create dummy params.
+    $params = [
+        'amount_due' => 25.50,
+        'tool_replacement_charge' => 150.00,
+        'unreturned_batteries_charge' => 25.00,
+        'replacement_value' => 100.00,
+        'due_date' => date('F j, Y', time() + 86400),
+        'issue_type' => 'damage',
+        'notes' => 'This is a test issue description.',
+        'reporter' => 'Test Reporter',
+        'item_url' => 'https://example.com/node/1',
+    ];
 
-    if (!$transaction) {
-      $this->messenger()->addError($this->t('Transaction not found.'));
-      return;
+    // The send email function needs a real user object for name and email.
+    // We'll create a dummy one and override the email with the one from the form.
+    $dummy_user = new \stdClass();
+    $dummy_user->getDisplayName = function() { return 'Test Borrower'; };
+    $dummy_user->getEmail = function() use ($recipient_email) { return $recipient_email; };
+    $dummy_user->getPreferredLangcode = function() { return $this->languageManager->getDefaultLanguage()->getId(); };
+
+    $params['borrower_user'] = $dummy_user;
+
+    // The function expects an entity, so we need to mock that part.
+    // We'll create a mock that can return the dummy user.
+    $mock_transaction = new \stdClass();
+    $mock_transaction->get = function ($field) use ($dummy_user) {
+      if ($field === 'field_library_borrower') {
+        return (object)['entity' => $dummy_user];
+      }
+      if ($field === 'field_library_item') {
+        return (object)['entity' => (object)['label' => 'Test Tool 123']];
+      }
+      return (object)['value' => 0];
+    };
+
+    // We can't easily mock the User::load call inside the helper.
+    // So, we'll call the mail manager directly, which is what the helper does.
+    $params['transaction_id'] = 999;
+    $site_from = $this->configFactory->get('system.site')->get('mail');
+    $result = $this->mailManager->mail(
+        'lending_library',
+        $email_key,
+        $recipient_email,
+        $this->languageManager->getDefaultLanguage()->getId(),
+        $params,
+        $site_from,
+        TRUE
+    );
+
+    if ($result['result']) {
+      $this->messenger()->addStatus($this->t('Test email sent to %email.', ['%email' => $recipient_email]));
     }
-
-    // Include the module file to ensure helper functions are available.
-    module_load_include('module', 'lending_library');
-
-    $config = $this->config('lending_library.settings');
-    $non_return_charge_percentage = $config->get('non_return_charge_percentage') ?: 150;
-
-    _lending_library_process_non_return_charge($transaction, $non_return_charge_percentage);
-    $this->messenger()->addStatus($this->t('Non-return charge processing complete for transaction %id.', ['%id' => $transaction_id]));
-  }
-
-  /**
-   * Submit handler for the "Send Due Soon Email" button.
-   */
-  public function sendDueSoonEmail(array &$form, FormStateInterface $form_state) {
-    $transaction_id = $form_state->getValue('transaction_id');
-    $transaction = $this->entityTypeManager->getStorage('library_transaction')->load($transaction_id);
-
-    if (!$transaction) {
-      $this->messenger()->addError($this->t('Transaction not found.'));
-      return;
+    else {
+      $this->messenger()->addError($this->t('Failed to send test email.'));
     }
-
-    // Include the module file to ensure helper functions are available.
-    module_load_include('module', 'lending_library');
-
-    _lending_library_send_due_soon_email($transaction);
-    $this->messenger()->addStatus($this->t('Due soon email sent for transaction %id.', ['%id' => $transaction_id]));
   }
 
 }

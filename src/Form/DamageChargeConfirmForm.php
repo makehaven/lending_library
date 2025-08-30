@@ -116,7 +116,10 @@ class DamageChargeConfirmForm extends ConfirmFormBase {
       // The function _lending_library_send_email_by_key is defined in lending_library.module.
       // We need to ensure that module is loaded.
       \Drupal::moduleHandler()->loadInclude('lending_library', 'module');
-      _lending_library_send_email_by_key($this->libraryTransaction, 'condition_charge', ['amount_due' => $amount_due]);
+      _lending_library_send_email_by_key($this->libraryTransaction, 'condition_charge', [
+        'amount_due' => $amount_due,
+        'transaction_id' => $this->libraryTransaction->id(),
+      ]);
       $this->messenger()->addStatus($this->t('Damage charge notification has been sent.'));
     }
 
