@@ -1,0 +1,28 @@
+uuid: 8a939f1c-4b6d-4e9b-9f8c-8f9d3a7e5f3c
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_waitlist
+    - node.type.library_item
+id: node.library_item.field_library_item_waitlist
+field_name: field_library_item_waitlist
+entity_type: node
+bundle: library_item
+label: Waitlist
+description: 'Users waiting for this item to be returned.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  handler: 'default:user'
+  handler_settings:
+    include_anonymous: false
+    filter:
+      type: _none
+    target_bundles: null
+    sort:
+      field: _none
+    auto_create: false
+field_type: entity_reference

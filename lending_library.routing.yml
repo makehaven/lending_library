@@ -56,6 +56,15 @@ lending_library.test_form:
   requirements:
     _permission: 'administer site configuration'
 
+lending_library.waitlist_add:
+  path: '/library/item/{node}/waitlist/add'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\WaitlistController::add'
+    _title: 'Get in Line'
+  requirements:
+    _permission: 'get in line for library items'
+    node: \d+
+
 
 lending_library.battery_return:
   path: '/library/battery/{battery}/return'

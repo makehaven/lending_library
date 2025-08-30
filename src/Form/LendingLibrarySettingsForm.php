@@ -175,6 +175,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#rows' => 5,
     ];
 
+    $form['email_settings']['waitlist_notification'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Waitlist Notification'),
+      '#group' => 'email_settings',
+    ];
+    $form['email_settings']['waitlist_notification']['email_waitlist_notification_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_waitlist_notification_subject') ?: $this->t('A tool you are waiting for is now available'),
+    ];
+    $form['email_settings']['waitlist_notification']['email_waitlist_notification_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_waitlist_notification_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout."),
+        '#rows' => 5,
+    ];
+
     $form['battery_return_message'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Battery return confirmation message'),
@@ -208,6 +225,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       ->set('email_due_soon_body', $form_state->getValue('email_due_soon_body'))
       ->set('email_condition_charge_subject', $form_state->getValue('email_condition_charge_subject'))
       ->set('email_condition_charge_body', $form_state->getValue('email_condition_charge_body'))
+      ->set('email_waitlist_notification_subject', $form_state->getValue('email_waitlist_notification_subject'))
+      ->set('email_waitlist_notification_body', $form_state->getValue('email_waitlist_notification_body'))
       ->set('battery_return_message', $form_state->getValue('battery_return_message'))
       ->save();
 
