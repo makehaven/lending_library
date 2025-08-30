@@ -38,7 +38,7 @@ sudo docker compose exec -T --user root drupal sh -lc '
   curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
   mkdir -p /var/www/.composer && chown -R www-data:www-data /var/www/.composer
   # PIN to Drupal 10
-  COMPOSER_HOME=/var/www/.composer composer create-project "drupal/recommended-project:^10" /var/www/html --no-interaction --ignore-platform-reqs
+  COMPOSER_HOME=/var/www/.composer composer create-project "drupal/recommended-project:^10" /var/www/html --no-interaction --ignore-platform-reqs --dev
   chown -R www-data:www-data /var/www/html
 '
 
@@ -60,10 +60,10 @@ echo "Module path: $MODULE_PATH"
 # Allow git to use the mounted directory
 sudo docker compose exec -T drupal sh -lc 'git config --global --add safe.directory /var/www/module_source'
 
-# Register path repo
+# Register path repo (copy, not symlink, to avoid recursion)
 sudo docker compose exec -T drupal sh -lc \
   'composer config --file=/var/www/html/composer.json repositories.lending_library \
-   "{\"type\":\"path\",\"url\":\"'"$MODULE_PATH"'\"}"'
+   "{\"type\":\"path\",\"url\":\"'"$MODULE_PATH"'\",\"options\":{\"symlink\":false}}"'
 
 echo "--- 6) Install Drush ---"
 sudo docker compose exec -T drupal sh -lc \
@@ -81,10 +81,14 @@ sudo docker compose exec -T drupal sh -lc \
     --account-name=admin \
     --account-pass=admin -y'
 
-echo "--- 9) Enable module ---"
+echo "--- 9) Ensure contrib deps ---"
+sudo docker compose exec -T drupal sh -lc \
+  'COMPOSER_HOME=/var/www/.composer composer require drupal/field_group:^3 --working-dir=/var/www/html --no-interaction'
+
+echo "--- 10) Enable module ---"
 sudo docker compose exec -T drupal sh -lc \
   '/var/www/html/vendor/bin/drush en lending_library -y'
 
-echo "--- 10) Fix permissions (as root) ---"
+echo "--- 11) Fix permissions (as root) ---"
 sudo docker compose exec -T --user root drupal sh -lc \
   'chown -R www-data:www-data /var/www/html/web/sites/default'

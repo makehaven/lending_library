@@ -113,6 +113,16 @@ This module can be tested in an isolated environment using Jules.
 
 Once the snapshot is created, Jules will be ready to help with development and testing tasks for this module.
 
+### Running Tests
+
+To run the automated tests for this module, execute the following command from the repository root:
+
+```bash
+sudo docker compose exec -T drupal /var/www/module_source/scripts/run-tests.sh
+```
+
+This will run the PHPUnit tests and show the results in your terminal.
+
 ## Manual User Testing (One-Click Setup)
 
 For manual, in-browser testing where you can click around and test features, you can use Gitpod. This will create a temporary, fully functional Drupal site with the Lending Library module installed. No local software is required.

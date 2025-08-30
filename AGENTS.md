@@ -17,7 +17,7 @@ This file describes the commands used for setting up and testing the Lending Lib
 
 ## Drush Agent
 - **Purpose**: A command-line tool for managing the Drupal site.
-- **Command**: `docker compose exec -T drupal /opt/drupal/vendor/bin/drush <sub-command>`
+- **Command**: `docker compose exec -T drupal /var/www/html/vendor/bin/drush <sub-command>`
 - **Usage**:
   - `drush site:install`: Installs a fresh Drupal site.
   - `drush en lending_library -y`: Enables the Lending Library module and installs its configuration.
