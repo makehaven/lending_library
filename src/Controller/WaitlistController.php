@@ -30,4 +30,25 @@ class WaitlistController extends ControllerBase {
     return new RedirectResponse($node->toUrl()->toString());
   }
 
+  /**
+   * Removes the current user from the waitlist for a library item.
+   */
+  public function remove(NodeInterface $node) {
+    if ($node->bundle() === 'library_item' && $node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
+      $waitlist_users = $node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
+      $current_user_id = $this->currentUser()->id();
+
+      foreach ($waitlist_users as $delta => $item) {
+        if ($item['target_id'] == $current_user_id) {
+          $node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->removeItem($delta);
+          $node->save();
+          $this->messenger()->addStatus($this->t('You have been removed from the waitlist for %title.', ['%title' => $node->label()]));
+          break;
+        }
+      }
+    }
+
+    return new RedirectResponse($node->toUrl()->toString());
+  }
+
 }
