@@ -148,12 +148,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#title' => $this->t('Enable "Due Soon" notifications'),
       '#default_value' => $config->get('enable_due_soon_notifications'),
     ];
-    $form['email_settings']['due_soon']['subject'] = [
+    $form['email_settings']['due_soon']['email_due_soon_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_due_soon_subject') ?: $this->t('Your borrowed tool is due soon'),
     ];
-    $form['email_settings']['due_soon']['body'] = [
+    $form['email_settings']['due_soon']['email_due_soon_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_due_soon_body') ?: $this->t("Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees."),
@@ -179,12 +179,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#title' => $this->t('Daily Late Fee Email'),
       '#description' => $this->t('Sent once when the first daily late fee is applied.'),
     ];
-    $form['email_settings']['overdue']['late_fee_email']['subject'] = [
+    $form['email_settings']['overdue']['late_fee_email']['email_overdue_late_fee_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_overdue_late_fee_subject') ?: $this->t('Late fee added for overdue tool'),
     ];
-    $form['email_settings']['overdue']['late_fee_email']['body'] = [
+    $form['email_settings']['overdue']['late_fee_email']['email_overdue_late_fee_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_overdue_late_fee_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]"),
@@ -197,12 +197,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#title' => $this->t('Lost Tool Replacement Charge Email'),
         '#description' => $this->t('Sent when an item is overdue by the "Days until Final Non-Return Charge".'),
     ];
-    $form['email_settings']['overdue']['non_return_email']['subject'] = [
+    $form['email_settings']['overdue']['non_return_email']['email_non_return_charge_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_non_return_charge_subject') ?: $this->t('Charge for unreturned library tool'),
     ];
-    $form['email_settings']['overdue']['non_return_email']['body'] = [
+    $form['email_settings']['overdue']['non_return_email']['email_non_return_charge_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_non_return_charge_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' is now considered lost. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]"),
@@ -220,12 +220,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#title' => $this->t('Condition Charge Notification'),
         '#description' => $this->t('Sent via the confirmation form when an admin applies a manual charge for damage or missing parts.'),
     ];
-    $form['email_settings']['other_templates']['condition_charge']['subject'] = [
+    $form['email_settings']['other_templates']['condition_charge']['email_condition_charge_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_condition_charge_subject') ?: $this->t('Charge for tool damage or missing parts'),
     ];
-    $form['email_settings']['other_templates']['condition_charge']['body'] = [
+    $form['email_settings']['other_templates']['condition_charge']['email_condition_charge_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_condition_charge_body') ?: $this->t("Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]"),
@@ -237,42 +237,64 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#title' => $this->t('Waitlist Notification'),
       '#description' => $this->t('Sent to the next person on the waitlist when a borrowed item is returned.'),
     ];
-    $form['email_settings']['other_templates']['waitlist']['subject'] = [
+    $form['email_settings']['other_templates']['waitlist']['email_waitlist_notification_subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
         '#default_value' => $config->get('email_waitlist_notification_subject') ?: $this->t('A tool you are waiting for is now available'),
     ];
-    $form['email_settings']['other_templates']['waitlist']['body'] = [
+    $form['email_settings']['other_templates']['waitlist']['email_waitlist_notification_body'] = [
         '#type' => 'textarea',
         '#title' => $this->t('Body'),
         '#default_value' => $config->get('email_waitlist_notification_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout."),
         '#rows' => 5,
     ];
 
-    $form['email_settings']['other_templates']['misc_footers'] = [
+    $form['email_settings']['other_templates']['checkout'] = [
       '#type' => 'details',
-      '#title' => $this->t('Miscellaneous Email Text'),
+      '#title' => $this->t('Checkout Confirmation Email'),
     ];
-    $form['email_settings']['other_templates']['misc_footers']['checkout_footer'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Checkout email footer'),
-      '#description' => $this->t('Appended to the bottom of the checkout confirmation email. Plain text or basic HTML.'),
-      '#default_value' => $config->get('email_checkout_footer') ?: '',
-      '#rows' => 3,
+    $form['email_settings']['other_templates']['checkout']['subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_checkout_subject') ?: $this->t('Tool Checkout Confirmation: [tool_name]'),
     ];
-    $form['email_settings']['other_templates']['misc_footers']['return_body'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Return email body'),
-      '#description' => $this->t('Inserted into the return confirmation email. Plain text or basic HTML.'),
-      '#default_value' => $config->get('email_return_body') ?: '',
-      '#rows' => 3,
+    $form['email_settings']['other_templates']['checkout']['body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_checkout_body') ?: "You have successfully checked out the following tool:\n\nTool: [tool_name]\nReplacement Value: $[replacement_value]\nDue on or before: [due_date].",
+        '#rows' => 5,
     ];
-    $form['email_settings']['other_templates']['misc_footers']['issue_intro'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Issue notice intro (staff email)'),
-      '#description' => $this->t('First line(s) of the issue notification email sent to staff. Plain text or basic HTML.'),
-      '#default_value' => $config->get('email_issue_notice_intro') ?: '',
-      '#rows' => 3,
+
+    $form['email_settings']['other_templates']['return'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Return Confirmation Email'),
+    ];
+    $form['email_settings']['other_templates']['return']['subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_return_subject') ?: $this->t('Tool Return Confirmation'),
+    ];
+    $form['email_settings']['other_templates']['return']['body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_return_body') ?: "Thanks! Your return has been recorded.\nTool: [tool_name]",
+        '#rows' => 5,
+    ];
+
+    $form['email_settings']['other_templates']['issue_report'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Issue Report Email (to staff)'),
+    ];
+    $form['email_settings']['other_templates']['issue_report']['subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_issue_report_subject') ?: $this->t('Lending Library Issue Report: [tool_name]'),
+    ];
+    $form['email_settings']['other_templates']['issue_report']['body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_issue_report_body') ?: "A member submitted an issue report.\n\nTool: [tool_name]\nIssue type: [issue_type]\nDetails: [notes]\nReported by: [reporter]\nItem page: [item_url]",
+        '#rows' => 5,
     ];
 
     $form['battery_return_message'] = [
@@ -289,44 +311,46 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('lending_library.settings');
 
-    // Manually get values from the nested form structure.
-    $email_settings = $form_state->getValue('email_settings');
+    // Even though the form is nested visually, #tree is not used, so the
+    // values are at the top level of the form state.
+    $values = $form_state->getValues();
+    $keys_to_save = [
+      'loan_period_days',
+      'daily_late_fee',
+      'late_fee_cap_percentage',
+      'overdue_charge_days',
+      'non_return_charge_percentage',
+      'loan_terms_html',
+      'battery_return_message',
+      'email_staff_address',
+      'paypal_email',
+      'enable_due_soon_notifications',
+      'email_due_soon_subject',
+      'email_due_soon_body',
+      'enable_overdue_notifications',
+      'email_overdue_late_fee_subject',
+      'email_overdue_late_fee_body',
+      'email_non_return_charge_subject',
+      'email_non_return_charge_body',
+      'email_condition_charge_subject',
+      'email_condition_charge_body',
+      'email_waitlist_notification_subject',
+      'email_waitlist_notification_body',
+      'email_checkout_subject',
+      'email_checkout_body',
+      'email_return_subject',
+      'email_return_body',
+      'email_issue_report_subject',
+      'email_issue_report_body',
+    ];
 
-    $config
-      ->set('loan_period_days', $form_state->getValue('loan_period_days'))
-      ->set('daily_late_fee', $form_state->getValue('daily_late_fee'))
-      ->set('late_fee_cap_percentage', $form_state->getValue('late_fee_cap_percentage'))
-      ->set('overdue_charge_days', $form_state->getValue('overdue_charge_days'))
-      ->set('non_return_charge_percentage', $form_state->getValue('non_return_charge_percentage'))
-      ->set('loan_terms_html', $form_state->getValue('loan_terms_html'))
-      ->set('battery_return_message', $form_state->getValue('battery_return_message'))
+    foreach ($keys_to_save as $key) {
+        if (isset($values[$key])) {
+            $config->set($key, $values[$key]);
+        }
+    }
 
-      // General Email Settings
-      ->set('email_staff_address', $email_settings['general']['email_staff_address'])
-      ->set('paypal_email', $email_settings['general']['paypal_email'])
-
-      // Due Soon
-      ->set('enable_due_soon_notifications', $email_settings['due_soon']['enable_due_soon_notifications'])
-      ->set('email_due_soon_subject', $email_settings['due_soon']['subject'])
-      ->set('email_due_soon_body', $email_settings['due_soon']['body'])
-
-      // Overdue
-      ->set('enable_overdue_notifications', $email_settings['overdue']['enable_overdue_notifications'])
-      ->set('email_overdue_late_fee_subject', $email_settings['overdue']['late_fee_email']['subject'])
-      ->set('email_overdue_late_fee_body', $email_settings['overdue']['late_fee_email']['body'])
-      ->set('email_non_return_charge_subject', $email_settings['overdue']['non_return_email']['subject'])
-      ->set('email_non_return_charge_body', $email_settings['overdue']['non_return_email']['body'])
-
-      // Other Templates
-      ->set('email_condition_charge_subject', $email_settings['other_templates']['condition_charge']['subject'])
-      ->set('email_condition_charge_body', $email_settings['other_templates']['condition_charge']['body'])
-      ->set('email_waitlist_notification_subject', $email_settings['other_templates']['waitlist']['subject'])
-      ->set('email_waitlist_notification_body', $email_settings['other_templates']['waitlist']['body'])
-      ->set('email_checkout_footer', $email_settings['other_templates']['misc_footers']['checkout_footer'])
-      ->set('email_return_body', $email_settings['other_templates']['misc_footers']['return_body'])
-      ->set('email_issue_notice_intro', $email_settings['other_templates']['misc_footers']['issue_intro'])
-
-      ->save();
+    $config->save();
 
     parent::submitForm($form, $form_state);
   }

@@ -1422,164 +1422,72 @@ function lending_library_mail($key, &$message, $params) {
     $message['headers']['Reply-To'] = $params['reply_to'];
   }
 
-  // Pull optional configurable snippets (with safe fallbacks).
   $cfg = \Drupal::config('lending_library.settings');
-  $checkout_footer = $cfg->get('email_checkout_footer') ?: '';
-  $return_body     = $cfg->get('email_return_body') ?: '';
-  $issue_intro     = $cfg->get('email_issue_notice_intro') ?: '';
 
-  // New templates
-  $due_soon_subject = $cfg->get('email_due_soon_subject') ?: 'Your borrowed tool is due soon';
-  $due_soon_body = $cfg->get('email_due_soon_body') ?: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees.";
-  $overdue_subject = $cfg->get('email_overdue_subject') ?: 'Your borrowed tool is overdue';
-  $overdue_body = $cfg->get('email_overdue_body') ?: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is now overdue. Please return it as soon as possible.";
-  $overdue_30_day_subject = $cfg->get('email_overdue_30_day_subject') ?: 'Charge for unreturned library tool';
-  $overdue_30_day_body = $cfg->get('email_overdue_30_day_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' is now 30 days overdue. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]";
-  $condition_charge_subject = $cfg->get('email_condition_charge_subject') ?: 'Charge for tool damage or missing parts';
-  $condition_charge_body = $cfg->get('email_condition_charge_body') ?: "Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]";
-  $waitlist_notification_subject = $cfg->get('email_waitlist_notification_subject') ?: 'A tool you are waiting for is now available';
-  $waitlist_notification_body = $cfg->get('email_waitlist_notification_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout.";
-  $overdue_late_fee_subject = $cfg->get('email_overdue_late_fee_subject') ?: 'Late fee added for overdue tool';
-  $overdue_late_fee_body = $cfg->get('email_overdue_late_fee_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]";
+  // Centralized replacement logic.
+  $replacements = [
+    '[tool_name]' => $params['tool_name'] ?? '',
+    '[borrower_name]' => $params['borrower_name'] ?? '',
+    '[amount_due]' => isset($params['amount_due']) ? '$' . number_format($params['amount_due'], 2) : '',
+    '[payment_link]' => $params['payment_link'] ?? '',
+    '[tool_replacement_charge]' => isset($params['tool_replacement_charge']) ? '$' . number_format($params['tool_replacement_charge'], 2) : '',
+    '[unreturned_batteries_charge]' => isset($params['unreturned_batteries_charge']) ? '$' . number_format($params['unreturned_batteries_charge'], 2) : '',
+    '[replacement_value]' => isset($params['replacement_value']) ? '$' . number_format($params['replacement_value'], 2) : '',
+    '[due_date]' => $params['due_date'] ?? '',
+    '[issue_type]' => $params['issue_type'] ?? '',
+    '[notes]' => $params['notes'] ?? '',
+    '[reporter]' => $params['reporter'] ?? '',
+    '[item_url]' => $params['item_url'] ?? '',
+  ];
 
+  $subject = '';
+  $body_template = '';
 
   switch ($key) {
-    case 'checkout_confirmation': {
-      $tool = $params['tool_name'] ?? t('Unknown tool');
-      $message['subject'] = t('Tool Checkout Confirmation: @tool_name', ['@tool_name' => $tool]);
-
-      $body = [];
-      $body[] = t('You have successfully checked out the following tool from the MakeHaven Lending Library:');
-      $body[] = '';
-      $body[] = t('Tool: @tool_name', ['@tool_name' => $tool]);
-
-      if (!empty($params['replacement_value'])) {
-        $body[] = t('Replacement Value: $@value', ['@value' => number_format($params['replacement_value'], 2)]);
-      }
-
-      if (!empty($params['due_date'])) {
-        $body[] = '';
-        $body[] = t('This item is due on or before: @due_date.', ['@due_date' => $params['due_date']]);
-      }
-
-      // Policy reminder (kept short; longer loan terms live on the form/config page).
-      $body[] = '';
-      $body[] = t('Please return tools on time and in good condition. Late fees may apply.');
-
-      if ($checkout_footer !== '') {
-        $body[] = '';
-        $body[] = $checkout_footer;
-      }
-
-      $body[] = '';
-      $body[] = t('Thank you,');
-      $body[] = t('The MakeHaven Team');
-
-      $message['body'][] = implode("\n", $body);
+    case 'checkout_confirmation':
+      $subject = $cfg->get('email_checkout_subject') ?: 'Tool Checkout Confirmation: [tool_name]';
+      $body_template = $cfg->get('email_checkout_body') ?: "You have successfully checked out the following tool:\n\nTool: [tool_name]\nReplacement Value: [replacement_value]\nDue on or before: [due_date].";
       break;
-    }
 
-    case 'return_confirmation': {
-      $tool = $params['tool_name'] ?? '';
-      $message['subject'] = t('Tool Return Confirmation');
-
-      $lines = [];
-      $lines[] = t('Thanks! Your return has been recorded.');
-      if ($tool !== '') {
-        $lines[] = t('Tool: @tool', ['@tool' => $tool]);
-      }
-      if ($return_body !== '') {
-        $lines[] = '';
-        $lines[] = $return_body;
-      }
-      $lines[] = '';
-      $lines[] = t('— MakeHaven Team');
-
-      $message['body'][] = implode("\n", $lines);
+    case 'return_confirmation':
+      $subject = $cfg->get('email_return_subject') ?: 'Tool Return Confirmation';
+      $body_template = $cfg->get('email_return_body') ?: "Thanks! Your return has been recorded.\nTool: [tool_name]";
       break;
-    }
 
-    case 'issue_report_notice': {
-      $tool = $params['tool_name'] ?? t('Unknown');
-      $message['subject'] = t('Lending Library Issue Report: @tool', ['@tool' => $tool]);
-
-      $lines = [];
-      if ($issue_intro !== '') {
-        $lines[] = $issue_intro;
-        $lines[] = '';
-      } else {
-        $lines[] = t('A member submitted an issue report.');
-        $lines[] = '';
-      }
-
-      $lines[] = t('Tool: @tool', ['@tool' => $tool]);
-
-      if (!empty($params['issue_type'])) {
-        $lines[] = t('Issue type: @issue', ['@issue' => $params['issue_type']]);
-      }
-      if (!empty($params['notes'])) {
-        $lines[] = t('Details: @notes', ['@notes' => $params['notes']]);
-      }
-      if (!empty($params['reporter'])) {
-        $lines[] = t('Reported by: @name', ['@name' => $params['reporter']]);
-      }
-      if (!empty($params['item_url'])) {
-        $lines[] = t('Item page: @url', ['@url' => $params['item_url']]);
-      }
-
-      $message['body'][] = implode("\n", $lines);
+    case 'issue_report_notice':
+      $subject = $cfg->get('email_issue_report_subject') ?: 'Lending Library Issue Report: [tool_name]';
+      $body_template = $cfg->get('email_issue_report_body') ?: "A member submitted an issue report.\n\nTool: [tool_name]\nIssue type: [issue_type]\nDetails: [notes]\nReported by: [reporter]\nItem page: [item_url]";
       break;
-    }
 
     case 'due_soon':
-    case 'overdue':
-    case 'overdue_30_day':
-    case 'condition_charge':
-    case 'overdue_late_fee':
-        $replacements = [
-            '[tool_name]' => $params['tool_name'] ?? '',
-            '[borrower_name]' => $params['borrower_name'] ?? '',
-            '[amount_due]' => isset($params['amount_due']) ? number_format($params['amount_due'], 2) : '',
-            '[payment_link]' => $params['payment_link'] ?? '',
-            '[tool_replacement_charge]' => isset($params['tool_replacement_charge']) ? number_format($params['tool_replacement_charge'], 2) : '',
-            '[unreturned_batteries_charge]' => isset($params['unreturned_batteries_charge']) ? number_format($params['unreturned_batteries_charge'], 2) : '',
-        ];
+      $subject = $cfg->get('email_due_soon_subject') ?: 'Your borrowed tool is due soon';
+      $body_template = $cfg->get('email_due_soon_body') ?: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees.";
+      break;
 
-        if ($key === 'due_soon') {
-            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $due_soon_subject);
-            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $due_soon_body);
-        }
-        elseif ($key === 'overdue') {
-            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_subject);
-            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_body);
-        }
-        elseif ($key === 'overdue_30_day') {
-            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_30_day_subject);
-            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_30_day_body);
-        }
-        else { // condition_charge
-            $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $condition_charge_subject);
-            $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $condition_charge_body);
-        }
-        break;
-    case 'waitlist_notification':
-        $replacements = [
-            '[tool_name]' => $params['tool_name'] ?? '',
-            '[borrower_name]' => $params['borrower_name'] ?? '',
-        ];
-        $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $waitlist_notification_subject);
-        $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $waitlist_notification_body);
-        break;
     case 'overdue_late_fee':
-        $replacements = [
-            '[tool_name]' => $params['tool_name'] ?? '',
-            '[borrower_name]' => $params['borrower_name'] ?? '',
-            '[amount_due]' => isset($params['amount_due']) ? number_format($params['amount_due'], 2) : '',
-            '[payment_link]' => $params['payment_link'] ?? '',
-        ];
-        $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_late_fee_subject);
-        $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_late_fee_body);
-        break;
+      $subject = $cfg->get('email_overdue_late_fee_subject') ?: 'Late fee added for overdue tool';
+      $body_template = $cfg->get('email_overdue_late_fee_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]";
+      break;
+
+    case 'overdue_30_day': // This key is kept for the non-return charge.
+      $subject = $cfg->get('email_non_return_charge_subject') ?: 'Charge for unreturned library tool';
+      $body_template = $cfg->get('email_non_return_charge_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' is now considered lost. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]";
+      break;
+
+    case 'condition_charge':
+      $subject = $cfg->get('email_condition_charge_subject') ?: 'Charge for tool damage or missing parts';
+      $body_template = $cfg->get('email_condition_charge_body') ?: "Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]";
+      break;
+
+    case 'waitlist_notification':
+      $subject = $cfg->get('email_waitlist_notification_subject') ?: 'A tool you are waiting for is now available';
+      $body_template = $cfg->get('email_waitlist_notification_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout.";
+      break;
+  }
+
+  if (!empty($subject) && !empty($body_template)) {
+    $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $subject);
+    $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $body_template);
   }
 }
 
