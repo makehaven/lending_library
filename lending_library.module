@@ -479,10 +479,14 @@ if (empty($terms_html)) {
 }
 
 $replacement_value = $item_details['replacement_value'] ?? 0;
+$config = \Drupal::config('lending_library.settings');
+$non_return_percentage = ($config->get('non_return_charge_percentage') ?: 150) / 100;
+$tool_replacement_charge = $replacement_value * $non_return_percentage;
+
 $replacements = [
   '[due_date]' => $due_date_display,
   '[replacement_value]' => number_format($replacement_value, 2),
-  '[replacement_value_150]' => number_format($replacement_value * 1.5, 2),
+  '[tool_replacement_charge]' => number_format($tool_replacement_charge, 2),
 ];
 
 $processed_terms = str_replace(array_keys($replacements), array_values($replacements), $terms_html);
@@ -1006,7 +1010,9 @@ function _lending_library_process_non_return_charge(EntityInterface $transaction
   }
 
   $replacement_charge = $replacement_value * ($non_return_charge_percentage / 100);
-  $battery_charge = _lending_library_calculate_unreturned_battery_value($transaction);
+
+  $battery_value = _lending_library_calculate_unreturned_battery_value($transaction);
+  $battery_charge = $battery_value * ($non_return_charge_percentage / 100);
 
   $total_due = $replacement_charge + $battery_charge;
 
@@ -1032,7 +1038,11 @@ function _lending_library_process_non_return_charge(EntityInterface $transaction
   $transaction->save();
 
   // Send email
-  _lending_library_send_email_by_key($transaction, 'overdue_30_day', ['amount_due' => $total_due]);
+  _lending_library_send_email_by_key($transaction, 'overdue_30_day', [
+    'amount_due' => $total_due,
+    'unreturned_batteries_charge' => $battery_charge,
+    'tool_replacement_charge' => $replacement_charge,
+  ]);
 }
 
 /**
@@ -1525,11 +1535,14 @@ function lending_library_mail($key, &$message, $params) {
     case 'overdue':
     case 'overdue_30_day':
     case 'condition_charge':
+    case 'overdue_late_fee':
         $replacements = [
             '[tool_name]' => $params['tool_name'] ?? '',
             '[borrower_name]' => $params['borrower_name'] ?? '',
             '[amount_due]' => isset($params['amount_due']) ? number_format($params['amount_due'], 2) : '',
             '[payment_link]' => $params['payment_link'] ?? '',
+            '[tool_replacement_charge]' => isset($params['tool_replacement_charge']) ? number_format($params['tool_replacement_charge'], 2) : '',
+            '[unreturned_batteries_charge]' => isset($params['unreturned_batteries_charge']) ? number_format($params['unreturned_batteries_charge'], 2) : '',
         ];
 
         if ($key === 'due_soon') {

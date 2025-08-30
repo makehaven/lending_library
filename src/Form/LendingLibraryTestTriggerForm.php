@@ -63,13 +63,13 @@ class LendingLibraryTestTriggerForm extends FormBase {
 
     $form['actions']['send_overdue'] = [
       '#type' => 'submit',
-      '#value' => $this->t('Test: Send Overdue Email'),
+      '#value' => $this->t('Test: Send Late Fee Email'),
       '#submit' => ['::sendOverdueEmail'],
     ];
 
     $form['actions']['process_30_day'] = [
       '#type' => 'submit',
-      '#value' => $this->t('Test: Process 30-Day Overdue & Send Email'),
+      '#value' => $this->t('Test: Process Non-Return Charge & Send Email'),
       '#submit' => ['::process30DayOverdue'],
     ];
 
@@ -90,7 +90,7 @@ class LendingLibraryTestTriggerForm extends FormBase {
   }
 
   /**
-   * Submit handler for the "Send Overdue Email" button.
+   * Submit handler for the "Send Late Fee Email" button.
    */
   public function sendOverdueEmail(array &$form, FormStateInterface $form_state) {
     $transaction_id = $form_state->getValue('transaction_id');
@@ -104,12 +104,14 @@ class LendingLibraryTestTriggerForm extends FormBase {
     // Include the module file to ensure helper functions are available.
     module_load_include('module', 'lending_library');
 
-    _lending_library_send_overdue_email($transaction);
-    $this->messenger()->addStatus($this->t('Overdue email sent for transaction %id.', ['%id' => $transaction_id]));
+    // The old generic overdue email was removed. We now test the new late fee email.
+    // We pass a dummy amount for testing purposes.
+    _lending_library_send_email_by_key($transaction, 'overdue_late_fee', ['amount_due' => 10.00]);
+    $this->messenger()->addStatus($this->t('Late fee email sent for transaction %id.', ['%id' => $transaction_id]));
   }
 
   /**
-   * Submit handler for the "Process 30-Day Overdue" button.
+   * Submit handler for the "Process Non-Return Charge" button.
    */
   public function process30DayOverdue(array &$form, FormStateInterface $form_state) {
     $transaction_id = $form_state->getValue('transaction_id');
@@ -123,8 +125,11 @@ class LendingLibraryTestTriggerForm extends FormBase {
     // Include the module file to ensure helper functions are available.
     module_load_include('module', 'lending_library');
 
-    _lending_library_process_30_day_overdue($transaction);
-    $this->messenger()->addStatus($this->t('30-day overdue processing complete for transaction %id.', ['%id' => $transaction_id]));
+    $config = $this->config('lending_library.settings');
+    $non_return_charge_percentage = $config->get('non_return_charge_percentage') ?: 150;
+
+    _lending_library_process_non_return_charge($transaction, $non_return_charge_percentage);
+    $this->messenger()->addStatus($this->t('Non-return charge processing complete for transaction %id.', ['%id' => $transaction_id]));
   }
 
   /**
