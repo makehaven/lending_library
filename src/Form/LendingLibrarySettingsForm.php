@@ -33,6 +33,53 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#min' => 1,
     ];
 
+    $form['fee_settings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Fee and Fine Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['fee_settings']['explanation'] = [
+      '#type' => 'markup',
+      '#markup' => '<p>' . $this->t("The system checks for overdue items daily. If an item is overdue, a <strong>Daily Late Fee</strong> is applied for each day it is late. The total late fees for an item will not exceed the <strong>Late Fee Cap Percentage</strong> of the tool's replacement value. If an item is not returned after the configured <strong>Days until Final Non-Return Charge</strong>, the system will instead apply the full <strong>Non-Return Charge Percentage</strong> of the tool's value.") . '</p>',
+    ];
+
+    $form['fee_settings']['daily_late_fee'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Daily Late Fee'),
+      '#description' => $this->t('The amount to charge per day for late items. Set to 0 to disable daily late fees.'),
+      '#default_value' => $config->get('daily_late_fee') ?: 10,
+      '#min' => 0,
+      '#step' => '0.01',
+    ];
+
+    $form['fee_settings']['late_fee_cap_percentage'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Late Fee Cap Percentage'),
+      '#description' => $this->t('The maximum late fee that can be charged, as a percentage of the tool\'s replacement value. For example, enter 50 for 50%.'),
+      '#default_value' => $config->get('late_fee_cap_percentage') ?: 50,
+      '#min' => 0,
+      '#max' => 100,
+      '#field_suffix' => '%',
+    ];
+
+    $form['fee_settings']['overdue_charge_days'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Days until Final Non-Return Charge'),
+      '#description' => $this->t('The number of days after the due date to charge for a non-returned tool.'),
+      '#default_value' => $config->get('overdue_charge_days') ?: 30,
+      '#min' => 1,
+    ];
+
+    $form['fee_settings']['non_return_charge_percentage'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Non-Return Charge Percentage'),
+      '#description' => $this->t('The percentage of the tool\'s replacement value to charge when it is not returned. For example, enter 150 for 150%.'),
+      '#default_value' => $config->get('non_return_charge_percentage') ?: 150,
+      '#min' => 0,
+      '#field_suffix' => '%',
+    ];
+
     $form['loan_settings']['loan_terms_html'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Loan terms (HTML shown on checkout form)'),
@@ -202,6 +249,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#rows' => 5,
     ];
 
+    $form['email_settings']['overdue_late_fee'] = [
+        '#type' => 'details',
+        '#title' => $this->t('Overdue Late Fee Notification'),
+        '#group' => 'email_settings',
+    ];
+    $form['email_settings']['overdue_late_fee']['email_overdue_late_fee_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_overdue_late_fee_subject') ?: $this->t('Late fee added for overdue tool'),
+    ];
+    $form['email_settings']['overdue_late_fee']['email_overdue_late_fee_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_overdue_late_fee_body') ?: $this->t("Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]"),
+        '#rows' => 5,
+    ];
+
     $form['battery_return_message'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Battery return confirmation message'),
@@ -220,6 +284,10 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     // the values are at the top level of the form state values array.
     $config
       ->set('loan_period_days', $form_state->getValue('loan_period_days'))
+      ->set('daily_late_fee', $form_state->getValue('daily_late_fee'))
+      ->set('late_fee_cap_percentage', $form_state->getValue('late_fee_cap_percentage'))
+      ->set('overdue_charge_days', $form_state->getValue('overdue_charge_days'))
+      ->set('non_return_charge_percentage', $form_state->getValue('non_return_charge_percentage'))
       ->set('loan_terms_html', $form_state->getValue('loan_terms_html'))
       ->set('enable_due_soon_notifications', $form_state->getValue('enable_due_soon_notifications'))
       ->set('enable_overdue_notifications', $form_state->getValue('enable_overdue_notifications'))
@@ -238,6 +306,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       ->set('email_condition_charge_body', $form_state->getValue('email_condition_charge_body'))
       ->set('email_waitlist_notification_subject', $form_state->getValue('email_waitlist_notification_subject'))
       ->set('email_waitlist_notification_body', $form_state->getValue('email_waitlist_notification_body'))
+      ->set('email_overdue_late_fee_subject', $form_state->getValue('email_overdue_late_fee_subject'))
+      ->set('email_overdue_late_fee_body', $form_state->getValue('email_overdue_late_fee_body'))
       ->set('battery_return_message', $form_state->getValue('battery_return_message'))
       ->save();
 

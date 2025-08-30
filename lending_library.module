@@ -200,6 +200,43 @@ function _lending_library_return_batteries(array $batteries) {
   }
 }
 
+/**
+ * Submit handler to check for manual damage charges and redirect to a confirmation form.
+ */
+function _lending_library_check_for_damage_charge_submit(array &$form, FormStateInterface $form_state) {
+  $transaction = $form_state->getFormObject()->getEntity();
+
+  // Ensure we have the original entity to compare against.
+  if (!isset($transaction->original)) {
+    return;
+  }
+  $original_transaction = $transaction->original;
+
+  $is_damage_transaction = FALSE;
+  if ($transaction->hasField('field_library_inspection_issues') && $transaction->get('field_library_inspection_issues')->value === 'damage') {
+    $is_damage_transaction = TRUE;
+  }
+
+  if (!$is_damage_transaction) {
+    return;
+  }
+
+  $original_amount_due = 0;
+  if ($original_transaction->hasField('field_library_amount_due') && !$original_transaction->get('field_library_amount_due')->isEmpty()) {
+    $original_amount_due = $original_transaction->get('field_library_amount_due')->value;
+  }
+
+  $new_amount_due = 0;
+  if ($transaction->hasField('field_library_amount_due') && !$transaction->get('field_library_amount_due')->isEmpty()) {
+    $new_amount_due = $transaction->get('field_library_amount_due')->value;
+  }
+
+  // If the amount due was increased, redirect to the confirmation form.
+  if ($new_amount_due > 0 && $new_amount_due > $original_amount_due) {
+    $form_state->setRedirectUrl($transaction->toUrl('canonical')->setRouteParameter('library_transaction', $transaction->id())->setRouteName('lending_library.damage_charge_confirm'));
+  }
+}
+
 
 /**
  * Implements hook_form_FORM_ID_alter() for the library_transaction entity form.
@@ -411,6 +448,7 @@ if (!empty($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'])
         break;
     }
     $form['actions']['submit']['#submit'][] = '_lending_library_transaction_form_submit';
+    $form['actions']['submit']['#submit'][] = '_lending_library_check_for_damage_charge_submit';
   }
 
   if ($current_action === LENDING_LIBRARY_ACTION_WITHDRAW) {
@@ -841,6 +879,13 @@ function lending_library_cron() {
   $now = new DrupalDateTime('now');
   $config = \Drupal::config('lending_library.settings');
 
+  // Get all fee settings.
+  $overdue_charge_days = $config->get('overdue_charge_days') ?: 30;
+  $non_return_charge_percentage = $config->get('non_return_charge_percentage') ?: 150;
+  $daily_late_fee = $config->get('daily_late_fee') ?: 10;
+  $late_fee_cap_percentage = $config->get('late_fee_cap_percentage') ?: 50;
+  $enable_overdue_notifications = $config->get('enable_overdue_notifications');
+
   // Find all items that are currently borrowed or missing.
   $query = \Drupal::entityQuery('node')
     ->condition('type', LENDING_LIBRARY_ITEM_NODE_TYPE)
@@ -891,22 +936,49 @@ function lending_library_cron() {
     }
     else {
       // Overdue.
-      if ($config->get('enable_overdue_notifications')) {
-        $days_overdue = $due_date->diff($now)->days;
+      if (!$enable_overdue_notifications) {
+        continue;
+      }
 
-        if ($days_overdue >= 30) {
-          // To avoid processing multiple times, check a flag on the transaction.
-          if ($transaction->hasField('field_library_30day_processed') && $transaction->get('field_library_30day_processed')->value) {
-            continue;
-          }
-          _lending_library_process_30_day_overdue($transaction);
+      $days_overdue = $due_date->diff($now)->days;
+
+      // Check if it's time for the final non-return charge.
+      if ($days_overdue >= $overdue_charge_days) {
+        if ($transaction->hasField('field_library_30day_processed') && $transaction->get('field_library_30day_processed')->value) {
+          continue;
         }
-        else {
-          // To avoid spamming, check a flag.
-          if ($transaction->hasField('field_library_overdue_notified') && $transaction->get('field_library_overdue_notified')->value) {
-            continue;
+        _lending_library_process_non_return_charge($transaction, $non_return_charge_percentage);
+      }
+      // Otherwise, if daily late fees are enabled, process them.
+      elseif ($daily_late_fee > 0) {
+        $item_details = _lending_library_get_item_details($item);
+        $replacement_value = $item_details['replacement_value'] ?? 0;
+
+        if ($replacement_value > 0) {
+          $late_fee_cap = $replacement_value * ($late_fee_cap_percentage / 100);
+          $cumulative_late_fee = $days_overdue * $daily_late_fee;
+          $final_late_fee = min($cumulative_late_fee, $late_fee_cap);
+
+          $current_amount_due = 0;
+          if ($transaction->hasField('field_library_amount_due') && !$transaction->get('field_library_amount_due')->isEmpty()) {
+              $current_amount_due = $transaction->get('field_library_amount_due')->value;
           }
-          _lending_library_send_overdue_email($transaction);
+
+          if ($final_late_fee > $current_amount_due) {
+            $transaction->set('field_library_amount_due', $final_late_fee);
+            if ($transaction->hasField('field_library_charge_overdue')) {
+                $transaction->set('field_library_charge_overdue', $final_late_fee);
+            }
+            $transaction->save();
+
+            if (!$transaction->hasField('field_library_overdue_notified') || !$transaction->get('field_library_overdue_notified')->value) {
+              _lending_library_send_email_by_key($transaction, 'overdue_late_fee', ['amount_due' => $final_late_fee]);
+              if ($transaction->hasField('field_library_overdue_notified')) {
+                $transaction->set('field_library_overdue_notified', 1);
+                $transaction->save();
+              }
+            }
+          }
         }
       }
     }
@@ -916,9 +988,9 @@ function lending_library_cron() {
 }
 
 /**
- * Processes a transaction that is 30 days overdue.
+ * Processes a transaction for a non-returned item.
  */
-function _lending_library_process_30_day_overdue(EntityInterface $transaction) {
+function _lending_library_process_non_return_charge(EntityInterface $transaction, $non_return_charge_percentage) {
   $item_ref = $transaction->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD);
   if ($item_ref->isEmpty()) {
     return;
@@ -933,12 +1005,13 @@ function _lending_library_process_30_day_overdue(EntityInterface $transaction) {
     $replacement_value = $library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value;
   }
 
+  $replacement_charge = $replacement_value * ($non_return_charge_percentage / 100);
   $battery_charge = _lending_library_calculate_unreturned_battery_value($transaction);
 
-  $total_due = $replacement_value + $battery_charge;
+  $total_due = $replacement_charge + $battery_charge;
 
   if ($transaction->hasField('field_library_charge_replacement')) {
-    $transaction->set('field_library_charge_replacement', $replacement_value);
+    $transaction->set('field_library_charge_replacement', $replacement_charge);
   }
   if ($transaction->hasField('field_library_charge_battery')) {
     $transaction->set('field_library_charge_battery', $battery_charge);
@@ -960,18 +1033,6 @@ function _lending_library_process_30_day_overdue(EntityInterface $transaction) {
 
   // Send email
   _lending_library_send_email_by_key($transaction, 'overdue_30_day', ['amount_due' => $total_due]);
-}
-
-/**
- * Sends a generic overdue email.
- */
-function _lending_library_send_overdue_email(EntityInterface $transaction) {
-  // Flag as notified.
-  if ($transaction->hasField('field_library_overdue_notified')) {
-    $transaction->set('field_library_overdue_notified', 1);
-    $transaction->save();
-  }
-  _lending_library_send_email_by_key($transaction, 'overdue');
 }
 
 /**
@@ -1368,6 +1429,8 @@ function lending_library_mail($key, &$message, $params) {
   $condition_charge_body = $cfg->get('email_condition_charge_body') ?: "Hello [borrower_name],\n\nA charge of [amount_due] has been added to your account for the tool '[tool_name]' due to its condition upon return. Please use the following link to pay: [payment_link]";
   $waitlist_notification_subject = $cfg->get('email_waitlist_notification_subject') ?: 'A tool you are waiting for is now available';
   $waitlist_notification_body = $cfg->get('email_waitlist_notification_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout.";
+  $overdue_late_fee_subject = $cfg->get('email_overdue_late_fee_subject') ?: 'Late fee added for overdue tool';
+  $overdue_late_fee_body = $cfg->get('email_overdue_late_fee_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]";
 
 
   switch ($key) {
@@ -1493,6 +1556,16 @@ function lending_library_mail($key, &$message, $params) {
         ];
         $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $waitlist_notification_subject);
         $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $waitlist_notification_body);
+        break;
+    case 'overdue_late_fee':
+        $replacements = [
+            '[tool_name]' => $params['tool_name'] ?? '',
+            '[borrower_name]' => $params['borrower_name'] ?? '',
+            '[amount_due]' => isset($params['amount_due']) ? number_format($params['amount_due'], 2) : '',
+            '[payment_link]' => $params['payment_link'] ?? '',
+        ];
+        $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $overdue_late_fee_subject);
+        $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $overdue_late_fee_body);
         break;
   }
 }

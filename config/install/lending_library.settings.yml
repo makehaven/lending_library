@@ -8,3 +8,9 @@ enable_overdue_notifications: true
 email_due_soon_subject: 'Your borrowed tool is due soon'
 email_due_soon_body: "Hello [borrower_name],\n\nThis is a reminder that the tool '[tool_name]' you borrowed is due tomorrow. Please return it on time to avoid late fees."
 paypal_email: ''
+daily_late_fee: 10
+late_fee_cap_percentage: 50
+overdue_charge_days: 30
+non_return_charge_percentage: 150
+email_overdue_late_fee_subject: 'Late fee added for overdue tool'
+email_overdue_late_fee_body: "Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]"

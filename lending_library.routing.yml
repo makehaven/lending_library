@@ -92,3 +92,16 @@ lending_library.paypal_ipn_listener:
   methods: [POST]
   requirements:
     _access: 'TRUE'
+
+lending_library.damage_charge_confirm:
+  path: '/library-transaction/{library_transaction}/confirm-damage-charge'
+  defaults:
+    _form: '\Drupal\lending_library\Form\DamageChargeConfirmForm'
+    _title: 'Confirm Damage Charge'
+  requirements:
+    _permission: 'administer library_transaction entities'
+    library_transaction: \d+
+  options:
+    parameters:
+      library_transaction:
+        type: entity:library_transaction
