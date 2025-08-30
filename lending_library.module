@@ -976,7 +976,10 @@ function lending_library_cron() {
             $transaction->save();
 
             if (!$transaction->hasField('field_library_overdue_notified') || !$transaction->get('field_library_overdue_notified')->value) {
-              _lending_library_send_email_by_key($transaction, 'overdue_late_fee', ['amount_due' => $final_late_fee]);
+              _lending_library_send_email_by_key($transaction, 'overdue_late_fee', [
+                'amount_due' => $final_late_fee,
+                'transaction_id' => $transaction->id(),
+              ]);
               if ($transaction->hasField('field_library_overdue_notified')) {
                 $transaction->set('field_library_overdue_notified', 1);
                 $transaction->save();
@@ -1042,6 +1045,7 @@ function _lending_library_process_non_return_charge(EntityInterface $transaction
     'amount_due' => $total_due,
     'unreturned_batteries_charge' => $battery_charge,
     'tool_replacement_charge' => $replacement_charge,
+    'transaction_id' => $transaction->id(),
   ]);
 }
 
@@ -1069,18 +1073,6 @@ function _lending_library_send_email_by_key(EntityInterface $transaction, $key, 
         'tool_name' => $library_item_node->label(),
         'borrower_name' => $borrower_user->getDisplayName(),
     ] + $extra_params;
-
-    if (isset($params['amount_due'])) {
-      $config = \Drupal::config('lending_library.settings');
-      $paypal_email = $config->get('paypal_email');
-      if (!empty($paypal_email)) {
-        $item_name_encoded = urlencode($library_item_node->label() . ' - Overdue Charge');
-        $amount_encoded = urlencode($params['amount_due']);
-        $custom_encoded = urlencode($transaction->id());
-        $paypal_email_encoded = urlencode($paypal_email);
-        $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business={$paypal_email_encoded}&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
-      }
-    }
 
     $from = \Drupal::config('system.site')->get('mail');
     \Drupal::service('plugin.manager.mail')->mail(
@@ -1179,8 +1171,11 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
           $links['waitlist'] = ['#type' => 'link', '#title' => t('Leave Waitlist'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
         }
         else {
-          $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
-          $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
+          // Do not show "Get in Line" to the current borrower of the item.
+          if ($item_details['borrower_uid'] != $current_user->id()) {
+            $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
+            $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
+          }
         }
       }
       if ($item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_RETIRED) {
@@ -1423,6 +1418,19 @@ function lending_library_mail($key, &$message, $params) {
   }
 
   $cfg = \Drupal::config('lending_library.settings');
+
+  // Generate payment link if applicable.
+  if (isset($params['amount_due']) && $params['amount_due'] > 0) {
+    $paypal_email = $cfg->get('paypal_email');
+    if (!empty($paypal_email)) {
+      $item_name_encoded = urlencode($params['tool_name'] . ' - Library Fee');
+      $amount_encoded = urlencode($params['amount_due']);
+      // The transaction ID is not available here directly, but can be passed in params.
+      $custom_encoded = isset($params['transaction_id']) ? urlencode($params['transaction_id']) : '';
+      $paypal_email_encoded = urlencode($paypal_email);
+      $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business={$paypal_email_encoded}&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
+    }
+  }
 
   // Centralized replacement logic.
   $replacements = [
