@@ -1,0 +1,22 @@
+uuid: 5e6f3b7a-8d3c-4b2a-8c7e-9f8d3c5a7b6a
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.library_transaction.field_paypal_ipn_log
+  module:
+    - eck
+    - text
+id: library_transaction.library_transaction.field_paypal_ipn_log
+field_name: field_paypal_ipn_log
+entity_type: library_transaction
+bundle: library_transaction
+label: 'PayPal IPN Log'
+description: 'Logs the raw data from a PayPal IPN.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings:
+  display_summary: false
+field_type: text_long

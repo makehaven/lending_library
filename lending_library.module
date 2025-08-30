@@ -1000,10 +1000,15 @@ function _lending_library_send_email_by_key(EntityInterface $transaction, $key, 
     ] + $extra_params;
 
     if (isset($params['amount_due'])) {
-      $item_name_encoded = urlencode($library_item_node->label() . ' - Overdue Charge');
-      $amount_encoded = urlencode($params['amount_due']);
-      $custom_encoded = urlencode('LendingLibrary');
-      $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business=payments%40makehaven.org&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
+      $config = \Drupal::config('lending_library.settings');
+      $paypal_email = $config->get('paypal_email');
+      if (!empty($paypal_email)) {
+        $item_name_encoded = urlencode($library_item_node->label() . ' - Overdue Charge');
+        $amount_encoded = urlencode($params['amount_due']);
+        $custom_encoded = urlencode($transaction->id());
+        $paypal_email_encoded = urlencode($paypal_email);
+        $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business={$paypal_email_encoded}&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
+      }
     }
 
     $from = \Drupal::config('system.site')->get('mail');

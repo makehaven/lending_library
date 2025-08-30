@@ -4,6 +4,7 @@ namespace Drupal\lending_library\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 
 class LendingLibrarySettingsForm extends ConfigFormBase {
 
@@ -105,6 +106,15 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#title' => $this->t('Staff notification email address'),
       '#description' => $this->t('The email address to which staff notifications are sent.'),
       '#default_value' => $config->get('email_staff_address') ?: '',
+    ];
+
+    $form['email_settings']['paypal_email'] = [
+      '#type' => 'email',
+      '#title' => $this->t('PayPal Email Address'),
+      '#description' => $this->t('The email address for your PayPal account to receive payments. You must also configure your PayPal account to send Instant Payment Notifications (IPN) to the following URL: @ipn_url', [
+        '@ipn_url' => Url::fromRoute('lending_library.paypal_ipn_listener', [], ['absolute' => TRUE])->toString(),
+      ]),
+      '#default_value' => $config->get('paypal_email') ?: '',
     ];
 
     $form['email_settings']['overdue'] = [
@@ -217,6 +227,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       ->set('email_return_body', $form_state->getValue('email_return_body'))
       ->set('email_issue_notice_intro', $form_state->getValue('email_issue_notice_intro'))
       ->set('email_staff_address', $form_state->getValue('email_staff_address'))
+      ->set('paypal_email', $form_state->getValue('paypal_email'))
       ->set('email_overdue_subject', $form_state->getValue('email_overdue_subject'))
       ->set('email_overdue_body', $form_state->getValue('email_overdue_body'))
       ->set('email_overdue_30_day_subject', $form_state->getValue('email_overdue_30_day_subject'))
