@@ -1,7 +1,10 @@
 loan_terms_html: '<div class="lending-library-agreement"><h4>Borrowing Member Affirms</h4><p>I have:</p><ul><li>Signed the tool borrowing policy and MakeHaven Lending Library Waiver, Release &amp; Indemnification, and have read the most updated policy.</li><li>Acquired the required badges, safety checkout and have reviewed manufacturer''s instructions for this tool.</li><li>Inspected the tool, and it is in good order.</li></ul><p>I will be:</p><ul><li>The only user of the tool and control access to the tool.</li><li>Responsible for damage/loss. (Replacement Value)</li></ul><h4>Loan Terms</h4><ul><li><strong></li><li>All tools borrowed are to be returned no later than seven days after checkout.</li><li>Late fees will be charged for overdue items: $5 per tool for the first week, and $10 per day thereafter until the tool is returned. Full cost of tool plus fees will be charged at 30 days. Late fees are capped at 150% of full replacement cost of the tool, plus cost of any additional batteries.</li></ul><p>Our full rules are at <a href="/tool-lending-library-enrollment">the enrollment form</a>.</p></div>'
-email_checkout_footer: 'Please treat our tools with care. — MakeHaven Team'
-email_return_body: 'Thanks — your return has been recorded.'
-email_issue_notice_intro: 'A member submitted an issue report.'
+email_checkout_subject: 'Tool Checkout Confirmation: [tool_name]'
+email_checkout_body: "You have successfully checked out the following tool:\n\nTool: [tool_name]\nReplacement Value: $[replacement_value]\nDue on or before: [due_date]."
+email_return_subject: 'Tool Return Confirmation'
+email_return_body: "Thanks! Your return has been recorded.\nTool: [tool_name]"
+email_issue_report_subject: 'Lending Library Issue Report: [tool_name]'
+email_issue_report_body: "A member submitted an issue report.\n\nTool: [tool_name]\nIssue type: [issue_type]\nDetails: [notes]\nReported by: [reporter]\nItem page: [item_url]"
 email_staff_address: 'team@makehaven.org'
 enable_due_soon_notifications: true
 enable_overdue_notifications: true
