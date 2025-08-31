@@ -530,6 +530,78 @@ function _lending_library_transaction_form_validate(&$form, FormStateInterface $
     if (!$form_state->getValue('lending_library_agreement_acknowledge')) {
       $form_state->setErrorByName('lending_library_agreement_acknowledge', t('You must acknowledge and agree to the terms before borrowing this tool.'));
     }
+
+    $config = \Drupal::config('lending_library.settings');
+    $current_user_id = \Drupal::currentUser()->id();
+    $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id);
+
+    // Check for outstanding debt.
+    if ($config->get('prevent_checkout_with_debt')) {
+      $query = \Drupal::entityQuery('library_transaction')
+        ->accessCheck(FALSE)
+        ->condition(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD, $current_user_id)
+        ->condition('field_library_charges_status', 'paid', '<>')
+        ->condition('field_library_amount_due', 0, '>');
+      $debt_transactions = $query->execute();
+      if (!empty($debt_transactions)) {
+        $form_state->setErrorByName('lending_library_agreement_acknowledge', t('You have outstanding debts and cannot borrow new items until they are paid.'));
+      }
+    }
+
+    // Check for overdue items.
+    if ($config->get('prevent_checkout_with_overdue')) {
+      $now = new DrupalDateTime('now');
+      $query = \Drupal::entityQuery('library_transaction')
+        ->accessCheck(FALSE)
+        ->condition(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD, $current_user_id)
+        ->condition(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD, $now->format('Y-m-d'), '<')
+        ->condition(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD, NULL, 'IS NULL');
+      $overdue_transactions = $query->execute();
+      if (!empty($overdue_transactions)) {
+        $form_state->setErrorByName('lending_library_agreement_acknowledge', t('You have overdue items and cannot borrow new items until they are returned.'));
+      }
+    }
+
+    // Check for max tool count.
+    $max_tool_count = $config->get('max_tool_count');
+    if (!empty($max_tool_count) && $max_tool_count > 0) {
+      $query = \Drupal::entityQuery('node')
+        ->accessCheck(FALSE)
+        ->condition('type', LENDING_LIBRARY_ITEM_NODE_TYPE)
+        ->condition(LENDING_LIBRARY_ITEM_BORROWER_FIELD, $current_user_id);
+      $borrowed_count = $query->count()->execute();
+      if ($borrowed_count >= $max_tool_count) {
+        $form_state->setErrorByName('lending_library_agreement_acknowledge', t('You have reached the maximum number of borrowed items (@count).', ['@count' => $max_tool_count]));
+      }
+    }
+
+    // Check for max tool value.
+    $max_tool_value = $config->get('max_tool_value');
+    if (!empty($max_tool_value) && $max_tool_value > 0) {
+      $query = \Drupal::entityQuery('node')
+        ->accessCheck(FALSE)
+        ->condition('type', LENDING_LIBRARY_ITEM_NODE_TYPE)
+        ->condition(LENDING_LIBRARY_ITEM_BORROWER_FIELD, $current_user_id);
+      $borrowed_ids = $query->execute();
+      $borrowed_value = 0;
+      if (!empty($borrowed_ids)) {
+        $borrowed_items = \Drupal::entityTypeManager()->getStorage('node')->loadMultiple($borrowed_ids);
+        foreach ($borrowed_items as $borrowed_item) {
+          if ($borrowed_item->hasField(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD) && !$borrowed_item->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->isEmpty()) {
+            $borrowed_value += $borrowed_item->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value;
+          }
+        }
+      }
+
+      $current_item_value = 0;
+      if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->isEmpty()) {
+        $current_item_value = $library_item_node->get(LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value;
+      }
+
+      if (($borrowed_value + $current_item_value) > $max_tool_value) {
+        $form_state->setErrorByName('lending_library_agreement_acknowledge', t('This item would exceed your maximum allowed total borrowing value ($@value).', ['@value' => $max_tool_value]));
+      }
+    }
   }
 
   if ($action === LENDING_LIBRARY_ACTION_RETURN) {

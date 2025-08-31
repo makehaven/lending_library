@@ -33,6 +33,38 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#min' => 1,
     ];
 
+    $form['loan_settings']['prevent_checkout_with_debt'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Prevent checkout with outstanding debt'),
+      '#description' => $this->t('If checked, users will not be able to check out new items if they have any unpaid fees.'),
+      '#default_value' => $config->get('prevent_checkout_with_debt'),
+    ];
+
+    $form['loan_settings']['prevent_checkout_with_overdue'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Prevent checkout with overdue items'),
+      '#description' => $this->t('If checked, users will not be able to check out new items if they have any items that are currently overdue.'),
+      '#default_value' => $config->get('prevent_checkout_with_overdue'),
+    ];
+
+    $form['loan_settings']['max_tool_count'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Maximum tool count'),
+      '#description' => $this->t('The maximum number of tools a user can have checked out at one time. Set to 0 for no limit.'),
+      '#default_value' => $config->get('max_tool_count') ?: 0,
+      '#min' => 0,
+    ];
+
+    $form['loan_settings']['max_tool_value'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Maximum tool value'),
+      '#description' => $this->t('The maximum total value of tools a user can have checked out at one time. Set to 0 for no limit.'),
+      '#default_value' => $config->get('max_tool_value') ?: 0,
+      '#min' => 0,
+      '#step' => '0.01',
+      '#field_prefix' => '$',
+    ];
+
     $form['fee_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Fee and Fine Settings'),
@@ -134,6 +166,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '@ipn_url' => Url::fromRoute('lending_library.paypal_ipn_listener', [], ['absolute' => TRUE])->toString(),
       ]),
       '#default_value' => $config->get('paypal_email') ?: '',
+      '#access' => \Drupal::currentUser()->hasPermission('administer lending library payment configuration'),
     ];
 
     // Due Soon Notifications
@@ -316,6 +349,10 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     $values = $form_state->getValues();
     $keys_to_save = [
       'loan_period_days',
+      'prevent_checkout_with_debt',
+      'prevent_checkout_with_overdue',
+      'max_tool_count',
+      'max_tool_value',
       'daily_late_fee',
       'late_fee_cap_percentage',
       'overdue_charge_days',
