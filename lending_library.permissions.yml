@@ -20,6 +20,10 @@ administer lending library configuration:
   title: 'Administer Lending Library configuration'
   description: 'Allows users to access the Lending Library configuration page.'
 
+administer lending library payment configuration:
+  title: 'Administer Lending Library payment configuration'
+  description: 'Allows users to change the PayPal account on the Lending Library configuration page.'
+
 'get in line for library items':
   title: 'Get in line for library items'
   description: 'Allows users to add themselves to the waitlist for a library item.'
