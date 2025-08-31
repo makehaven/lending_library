@@ -1601,10 +1601,7 @@ function lending_library_mail($key, &$message, $params) {
 
   if (!empty($subject) && !empty($body_template)) {
     $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $subject);
-
-    // Build final HTML and hand Mail System ONE string for Mime Mail to format.
-    $final_html = str_replace(array_keys($replacements), array_values($replacements), $body_template);
-    $message['body'] = $final_html; // IMPORTANT: string, not array
+    $message['body'] = str_replace(array_keys($replacements), array_values($replacements), $body_template);
   }
 }
 
