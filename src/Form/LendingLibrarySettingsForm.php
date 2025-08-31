@@ -114,11 +114,11 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     ];
 
     $form['loan_settings']['loan_terms_html'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
+      '#type' => 'textarea',
       '#title' => $this->t('Loan terms (HTML shown on checkout form)'),
       '#description' => $this->t('This HTML replaces the agreement block on the Withdraw form. Basic HTML allowed. See available replacement patterns below.'),
-      '#default_value' => $config->get('loan_terms_html')['value'] ?: '',
+      '#default_value' => $config->get('loan_terms_html') ?: '',
+      '#rows' => 10,
     ];
 
     $form['replacement_patterns'] = [
@@ -187,10 +187,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_due_soon_subject') ?: $this->t('Your borrowed tool is due soon'),
     ];
     $form['email_settings']['due_soon']['email_due_soon_body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_due_soon_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_due_soon_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #0056a0;">Reminder: Your Tool is Due Soon</h2>
         <p>Hi [borrower_name],</p>
@@ -205,6 +204,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     // Overdue Notifications
@@ -232,10 +232,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_overdue_late_fee_subject') ?: $this->t('Late fee added for overdue tool'),
     ];
     $form['email_settings']['overdue']['late_fee_email']['email_overdue_late_fee_body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_overdue_late_fee_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_overdue_late_fee_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #d9534f;">Notice: Overdue Item</h2>
         <p>Hi [borrower_name],</p>
@@ -244,6 +243,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     // Non-Return Charge Email
@@ -258,10 +258,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_non_return_charge_subject') ?: $this->t('Charge for unreturned library tool'),
     ];
     $form['email_settings']['overdue']['non_return_email']['email_non_return_charge_body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_non_return_charge_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_non_return_charge_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #d9534f;">Notice: Lost Item Charge</h2>
         <p>Hi [borrower_name],</p>
@@ -291,6 +290,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     // Other Email Templates
@@ -310,10 +310,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_condition_charge_subject') ?: $this->t('Charge for tool damage or missing parts'),
     ];
     $form['email_settings']['other_templates']['condition_charge']['email_condition_charge_body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_condition_charge_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_condition_charge_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #d9534f;">Notice: Damage/Missing Parts Charge</h2>
         <p>Hi [borrower_name],</p>
@@ -330,6 +329,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     $form['email_settings']['other_templates']['waitlist'] = [
@@ -343,10 +343,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_waitlist_notification_subject') ?: $this->t('A tool you are waiting for is now available'),
     ];
     $form['email_settings']['other_templates']['waitlist']['email_waitlist_notification_body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_waitlist_notification_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_waitlist_notification_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #5cb85c;">Great News! A Tool is Available!</h2>
         <p>Hi [borrower_name],</p>
@@ -355,6 +354,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     $form['email_settings']['other_templates']['checkout'] = [
@@ -367,10 +367,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_checkout_subject') ?: $this->t('Tool Checkout Confirmation: [tool_name]'),
     ];
     $form['email_settings']['other_templates']['checkout']['body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_checkout_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_checkout_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #0056a0;">Checkout Confirmation</h2>
         <p>Hi [borrower_name],</p>
@@ -392,6 +391,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     $form['email_settings']['other_templates']['return'] = [
@@ -404,10 +404,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_return_subject') ?: $this->t('Tool Return Confirmation'),
     ];
     $form['email_settings']['other_templates']['return']['body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_return_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_return_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #5cb85c;">Return Confirmed</h2>
         <p>Hi [borrower_name],</p>
@@ -416,6 +415,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     $form['email_settings']['other_templates']['issue_report'] = [
@@ -428,10 +428,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         '#default_value' => $config->get('email_issue_report_subject') ?: $this->t('Lending Library Issue Report: [tool_name]'),
     ];
     $form['email_settings']['other_templates']['issue_report']['body'] = [
-      '#type' => 'text_format',
-      '#format' => 'full_html',
-      '#title' => $this->t('Body'),
-      '#default_value' => $config->get('email_issue_report_body')['value'] ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_issue_report_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
     <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
         <h2 style="color: #d9534f;">New Issue Report</h2>
         <p>A member has submitted an issue report for a library item.</p>
@@ -459,6 +458,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         </table>
     </div>
 </div>',
+        '#rows' => 15,
     ];
 
     $form['battery_return_message'] = [
