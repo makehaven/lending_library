@@ -125,25 +125,64 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#type' => 'details',
       '#title' => $this->t('Available Replacement Patterns'),
     ];
-    $items = [
+
+    $items_general = [
+      $this->t('<code>[tool_name]</code>: The name of the library item.'),
+      $this->t('<code>[borrower_name]</code>: The name of the borrower.'),
+    ];
+
+    $items_dates = [
       $this->t('<code>[due_date]</code>: The calculated due date for the loan.'),
+    ];
+
+    $items_charges = [
       $this->t('<code>[replacement_value]</code>: The base replacement value of the tool.'),
       $this->t('<code>[tool_replacement_charge]</code>: The calculated replacement charge for the tool, including any markup.'),
       $this->t('<code>[unreturned_batteries_charge]</code>: The calculated replacement charge for any unreturned batteries.'),
       $this->t('<code>[amount_due]</code>: The total amount due (tool charge + battery charge + other fees).'),
-      $this->t('<code>[tool_name]</code>: The name of the library item.'),
-      $this->t('<code>[borrower_name]</code>: The name of the borrower.'),
       $this->t('<code>[payment_link]</code>: A pre-filled link to the payment system.'),
     ];
-    $form['replacement_patterns']['list'] = [
+
+    $items_issue = [
+      $this->t('<code>[issue_type]</code>: The type of issue reported.'),
+      $this->t('<code>[notes]</code>: The details of the issue reported.'),
+      $this->t('<code>[reporter]</code>: The name of the user who reported the issue.'),
+      $this->t('<code>[item_url]</code>: The URL of the library item page.'),
+    ];
+
+    $form['replacement_patterns']['general_list'] = [
+      '#prefix' => '<h4>' . $this->t('General') . '</h4>',
       '#theme' => 'item_list',
-      '#items' => $items,
+      '#items' => $items_general,
+    ];
+
+    $form['replacement_patterns']['dates_list'] = [
+      '#prefix' => '<h4>' . $this->t('Dates (available in loan-related emails)') . '</h4>',
+      '#theme' => 'item_list',
+      '#items' => $items_dates,
+    ];
+
+    $form['replacement_patterns']['charges_list'] = [
+      '#prefix' => '<h4>' . $this->t('Charges (available in charge-related emails)') . '</h4>',
+      '#theme' => 'item_list',
+      '#items' => $items_charges,
+    ];
+
+    $form['replacement_patterns']['issue_list'] = [
+      '#prefix' => '<h4>' . $this->t('Issue Reports (available in issue-related emails)') . '</h4>',
+      '#theme' => 'item_list',
+      '#items' => $items_issue,
     ];
 
     $form['email_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Email Settings'),
       '#open' => TRUE,
+    ];
+
+    $form['email_settings']['intro'] = [
+      '#type' => 'markup',
+      '#markup' => '<p>' . $this->t("This section allows you to customize the emails sent by the Lending Library module. You can use the replacement patterns listed below to include dynamic information in your emails.") . '</p>',
     ];
 
     $form['email_settings']['general'] = [
@@ -153,9 +192,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     ];
 
     $form['email_settings']['general']['email_staff_address'] = [
-      '#type' => 'email',
-      '#title' => $this->t('Staff notification email address'),
-      '#description' => $this->t('The email address to which staff notifications are sent.'),
+      '#type' => 'textarea',
+      '#title' => $this->t('Administrative notification email address(es)'),
+      '#description' => $this->t('The email address to which notifications are sent. Multiple addresses may be comma-separated.'),
       '#default_value' => $config->get('email_staff_address') ?: '',
     ];
 
@@ -422,6 +461,28 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#type' => 'details',
       '#title' => $this->t('Issue Report Email (to staff)'),
     ];
+    $form['email_settings']['other_templates']['issue_report']['damaged'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Damaged Item Notification'),
+      '#description' => $this->t('Sent to staff when a user reports an item as damaged.'),
+    ];
+    $form['email_settings']['other_templates']['issue_report']['damaged']['email_damaged_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_damaged_subject') ?: $this->t('Damage Report: [tool_name]'),
+    ];
+    $form['email_settings']['other_templates']['issue_report']['damaged']['email_damaged_address'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Damaged item notification email address(es)'),
+      '#description' => $this->t('The email address to which notifications for damaged items are sent. If left blank, this will fall back to the Administrative notification email address(es). Multiple addresses may be comma-separated.'),
+      '#default_value' => $config->get('email_damaged_address') ?: '',
+    ];
+    $form['email_settings']['other_templates']['issue_report']['damaged']['email_damaged_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_damaged_body') ?: "A member has reported damage to a library item.\n\nTool: [tool_name]\nDetails: [notes]\nReported by: [reporter]\nItem page: [item_url]",
+        '#rows' => 15,
+    ];
     $form['email_settings']['other_templates']['issue_report']['subject'] = [
         '#type' => 'textfield',
         '#title' => $this->t('Subject'),
@@ -510,6 +571,9 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'email_return_body',
       'email_issue_report_subject',
       'email_issue_report_body',
+      'email_damaged_subject',
+      'email_damaged_body',
+      'email_damaged_address',
     ];
 
     foreach ($keys_to_save as $key) {
