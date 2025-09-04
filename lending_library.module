@@ -1503,8 +1503,6 @@ function _lending_library_send_issue_email(EntityInterface $transaction_entity) 
 function _lending_library_send_damaged_email(EntityInterface $transaction_entity) {
   _lending_library_send_staff_email('damaged_item', $transaction_entity, 'email_damaged_address');
 }
-  }
-}
 
 
 /**
