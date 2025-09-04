@@ -733,7 +733,12 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
     case LENDING_LIBRARY_ACTION_ISSUE:
       \Drupal::messenger()->addStatus(t('Your issue report for @tool_name has been submitted.', ['@tool_name' => $tool_name]));
-      _lending_library_send_issue_email($transaction_entity);
+      if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD) && $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD)->value === 'damage') {
+        _lending_library_send_damaged_email($transaction_entity);
+      }
+      else {
+        _lending_library_send_issue_email($transaction_entity);
+      }
       if ($library_item_node) {
         $form_state->setRedirectUrl($library_item_node->toUrl());
       }
@@ -1425,7 +1430,10 @@ function _lending_library_send_return_email(EntityInterface $transaction_entity)
 /**
  * Sends an issue report notification to staff.
  */
-function _lending_library_send_issue_email(EntityInterface $transaction_entity) {
+/**
+ * Sends an administrative email based on a transaction and email key.
+ */
+function _lending_library_send_staff_email($email_key, EntityInterface $transaction_entity, $address_config_key) {
   $item_ref = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD);
   if ($item_ref->isEmpty()) return;
   $item = \Drupal::entityTypeManager()->getStorage('node')->load($item_ref->target_id);
@@ -1455,21 +1463,45 @@ function _lending_library_send_issue_email(EntityInterface $transaction_entity) 
   ];
 
   $config = \Drupal::config('lending_library.settings');
-  $to = $config->get('email_staff_address') ?: \Drupal::config('system.site')->get('mail');
+  $to_string = $config->get($address_config_key) ?: \Drupal::config('system.site')->get('mail');
+  if (empty($to_string)) {
+    // If the primary address is empty, fall back to the general staff address.
+    $to_string = $config->get('email_staff_address') ?: \Drupal::config('system.site')->get('mail');
+  }
+
+  $to_addresses = array_map('trim', explode(',', $to_string));
   $from = \Drupal::config('system.site')->get('mail');
 
-  $result = \Drupal::service('plugin.manager.mail')->mail(
-    'lending_library',
-    'issue_report_notice',
-    $to,
-    \Drupal::languageManager()->getDefaultLanguage()->getId(),
-    $params,
-    $from,
-    TRUE
-  );
-  if (empty($result['result'])) {
-    \Drupal::logger('lending_library')->error('Failed to send issue notice to @email.', ['@email' => $to]);
+  foreach ($to_addresses as $to) {
+    if (\Drupal::service('email.validator')->isValid($to)) {
+      $result = \Drupal::service('plugin.manager.mail')->mail(
+        'lending_library',
+        $email_key,
+        $to,
+        \Drupal::languageManager()->getDefaultLanguage()->getId(),
+        $params,
+        $from,
+        TRUE
+      );
+      if (empty($result['result'])) {
+        \Drupal::logger('lending_library')->error('Failed to send @key notice to @email.', ['@key' => $email_key, '@email' => $to]);
+      }
+    }
   }
+}
+
+/**
+ * Sends an issue report notification to staff.
+ */
+function _lending_library_send_issue_email(EntityInterface $transaction_entity) {
+  _lending_library_send_staff_email('issue_report_notice', $transaction_entity, 'email_staff_address');
+}
+
+/**
+ * Sends a damage report notification to staff.
+ */
+function _lending_library_send_damaged_email(EntityInterface $transaction_entity) {
+  _lending_library_send_staff_email('damaged_item', $transaction_entity, 'email_damaged_address');
 }
 
 
@@ -1562,6 +1594,11 @@ function lending_library_mail($key, &$message, $params) {
     case 'waitlist_notification':
       $subject = $cfg->get('email_waitlist_notification_subject') ?: 'A tool you are waiting for is now available';
       $body_template = $cfg->get('email_waitlist_notification_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' you were waiting for has been returned and is now available for checkout.";
+      break;
+
+    case 'damaged_item':
+      $subject = $cfg->get('email_damaged_subject') ?: 'Damage Report: [tool_name]';
+      $body_template = $cfg->get('email_damaged_body') ?: "A member has reported damage to a library item.\n\nTool: [tool_name]\nDetails: [notes]\nReported by: [reporter]\nItem page: [item_url]";
       break;
   }
 
