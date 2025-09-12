@@ -133,15 +133,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
 
     $items_dates = [
       $this->t('<code>[due_date]</code>: The calculated due date for the loan.'),
-      $this->t('<code>[days_late]</code>: The number of days the item was overdue.'),
     ];
 
     $items_charges = [
       $this->t('<code>[replacement_value]</code>: The base replacement value of the tool.'),
       $this->t('<code>[tool_replacement_charge]</code>: The calculated replacement charge for the tool, including any markup.'),
       $this->t('<code>[unreturned_batteries_charge]</code>: The calculated replacement charge for any unreturned batteries.'),
-      $this->t('<code>[daily_fee]</code>: The daily late fee amount.'),
-      $this->t('<code>[late_fee_total]</code>: The total calculated late fee.'),
       $this->t('<code>[amount_due]</code>: The total amount due (tool charge + battery charge + other fees).'),
       $this->t('<code>[payment_link]</code>: A pre-filled link to the payment system.'),
     ];
@@ -188,359 +185,54 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#markup' => '<p>' . $this->t("This section allows you to customize the emails sent by the Lending Library module. You can use the replacement patterns listed below to include dynamic information in your emails.") . '</p>',
     ];
 
-    $form['email_settings']['general'] = [
+    $form['email_settings']['user_facing'] = [
       '#type' => 'details',
-      '#title' => $this->t('General Email Settings'),
+      '#title' => $this->t('User-Facing Email Workflow'),
       '#open' => TRUE,
     ];
 
-    $form['email_settings']['general']['email_staff_address'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Administrative notification email address(es)'),
-      '#description' => $this->t('The email address to which notifications are sent. Multiple addresses may be comma-separated.'),
-      '#default_value' => $config->get('email_staff_address') ?: '',
-    ];
+    $form['email_settings']['user_facing']['waitlist'] = $form['email_settings']['other_templates']['waitlist'];
+    $form['email_settings']['user_facing']['waitlist']['#title'] = $this->t('1. Waitlist Notification');
 
-    $form['email_settings']['general']['paypal_email'] = [
-      '#type' => 'email',
-      '#title' => $this->t('PayPal Email Address'),
-      '#description' => $this->t('The email address for your PayPal account to receive payments. You must also configure your PayPal account to send Instant Payment Notifications (IPN) to the following URL: @ipn_url', [
-        '@ipn_url' => Url::fromRoute('lending_library.paypal_ipn_listener', [], ['absolute' => TRUE])->toString(),
-      ]),
-      '#default_value' => $config->get('paypal_email') ?: '',
-      '#access' => \Drupal::currentUser()->hasPermission('administer lending library payment configuration'),
-    ];
+    $form['email_settings']['user_facing']['checkout'] = $form['email_settings']['other_templates']['checkout'];
+    $form['email_settings']['user_facing']['checkout']['#title'] = $this->t('2. Checkout Confirmation Email');
 
-    // Due Soon Notifications
-    $form['email_settings']['due_soon'] = [
+    $form['email_settings']['user_facing']['due_soon'] = $form['email_settings']['due_soon'];
+    $form['email_settings']['user_facing']['due_soon']['#title'] = $this->t('3. Due Soon Notification');
+
+    $form['email_settings']['user_facing']['return'] = $form['email_settings']['other_templates']['return'];
+    $form['email_settings']['user_facing']['return']['#title'] = $this->t('4. Standard Return Confirmation');
+
+    $form['email_settings']['user_facing']['late_return_fee'] = $form['email_settings']['other_templates']['late_return_fee'];
+    $form['email_settings']['user_facing']['late_return_fee']['#title'] = $this->t('5. Late Return (with fee)');
+
+    $form['email_settings']['user_facing']['non_return_email'] = $form['email_settings']['overdue']['non_return_email'];
+    $form['email_settings']['user_facing']['non_return_email']['#title'] = $this->t('6. Non-Return (Lost Tool)');
+
+    $form['email_settings']['user_facing']['condition_charge'] = $form['email_settings']['other_templates']['condition_charge'];
+    $form['email_settings']['user_facing']['condition_charge']['#title'] = $this->t('7. Tool Condition Charge');
+
+    // Administrative emails.
+    $form['email_settings']['admin_facing'] = [
       '#type' => 'details',
-      '#title' => $this->t('Due Soon Notification'),
-      '#description' => $this->t('Sent to the borrower 24 hours before their loan is due.'),
+      '#title' => $this->t('Administrative Notifications'),
       '#open' => TRUE,
     ];
-    $form['email_settings']['due_soon']['enable_due_soon_notifications'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable "Due Soon" notifications'),
-      '#default_value' => $config->get('enable_due_soon_notifications'),
-    ];
-    $form['email_settings']['due_soon']['email_due_soon_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_due_soon_subject') ?: $this->t('Your borrowed tool is due soon'),
-    ];
-    $form['email_settings']['due_soon']['email_due_soon_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_due_soon_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #0056a0;">Reminder: Your Tool is Due Soon</h2>
-        <p>Hi [borrower_name],</p>
-        <p>This is a friendly reminder that the following tool is due for return on <strong>[due_date]</strong>:</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Tool:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[tool_name]</td>
-            </tr>
-        </table>
-        <p>Please return it on time to avoid any late fees. You can see your borrowed items on your library page.</p>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
 
-    $form['email_settings']['other_templates']['late_return_fee'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Late Return Fee Notification'),
-      '#description' => $this->t('Sent when a user returns an item late and a fee is charged.'),
-    ];
-    $form['email_settings']['other_templates']['late_return_fee']['email_late_return_fee_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_late_return_fee_subject') ?: $this->t('Late Fee Charged for Tool Return'),
-    ];
-    $form['email_settings']['other_templates']['late_return_fee']['email_late_return_fee_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_late_return_fee_body') ?: "Hello [borrower_name],\n\nThank you for returning '[tool_name]'. It was returned [days_late] days overdue.\n\nA late fee of [late_fee_total] has been charged to your account. Please use the following link to pay: [payment_link]",
-        '#rows' => 15,
-    ];
+    $form['email_settings']['admin_facing']['general'] = $form['email_settings']['general'];
+    $form['email_settings']['admin_facing']['general']['#title'] = $this->t('General');
 
-    // Overdue Notifications
-    $form['email_settings']['overdue'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Overdue Notifications'),
-      '#description' => $this->t('Sent to the borrower when an item becomes overdue.'),
-      '#open' => TRUE,
-    ];
-    $form['email_settings']['overdue']['enable_overdue_notifications'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable "Overdue" notifications'),
-      '#default_value' => $config->get('enable_overdue_notifications'),
-    ];
+    $form['email_settings']['admin_facing']['damaged'] = $form['email_settings']['other_templates']['issue_report']['damaged'];
+    $form['email_settings']['admin_facing']['damaged']['#title'] = $this->t('Damaged Item');
 
-    // Daily Late Fee Email
-    $form['email_settings']['overdue']['late_fee_email'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Daily Late Fee Email'),
-      '#description' => $this->t('Sent once when the first daily late fee is applied.'),
-    ];
-    $form['email_settings']['overdue']['late_fee_email']['email_overdue_late_fee_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_overdue_late_fee_subject') ?: $this->t('Late fee added for overdue tool'),
-    ];
-    $form['email_settings']['overdue']['late_fee_email']['email_overdue_late_fee_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_overdue_late_fee_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #d9534f;">Notice: Overdue Item</h2>
-        <p>Hi [borrower_name],</p>
-        <p>The tool you borrowed, <strong>[tool_name]</strong>, is now overdue. A late fee of <strong>[amount_due]</strong> has been applied to your account.</p>
-        <p>Please return the tool as soon as possible to avoid further fees. Any outstanding balance will be due upon return of the tool or when the loan period expires.</p>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
+    $form['email_settings']['admin_facing']['issue_report'] = $form['email_settings']['other_templates']['issue_report'];
+    $form['email_settings']['admin_facing']['issue_report']['#title'] = $this->t('Issue Report (Other)');
 
-    // Non-Return Charge Email
-    $form['email_settings']['overdue']['non_return_email'] = [
-        '#type' => 'details',
-        '#title' => $this->t('Lost Tool Replacement Charge Email'),
-        '#description' => $this->t('Sent when an item is overdue by the "Days until Final Non-Return Charge".'),
-    ];
-    $form['email_settings']['overdue']['non_return_email']['email_non_return_charge_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_non_return_charge_subject') ?: $this->t('Charge for unreturned library tool'),
-    ];
-    $form['email_settings']['overdue']['non_return_email']['email_non_return_charge_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_non_return_charge_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #d9534f;">Notice: Lost Item Charge</h2>
-        <p>Hi [borrower_name],</p>
-        <p>The tool, <strong>[tool_name]</strong>, is now considered lost since it has not been returned. You are being charged for its replacement.</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Tool Replacement:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[tool_replacement_charge]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Unreturned Batteries:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[unreturned_batteries_charge]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Total Due:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;"><strong>[amount_due]</strong></td>
-            </tr>
-        </table>
-        <p>Please use the following link to pay:</p>
-        <table style="width: 100%; text-align: center; margin: 20px 0;">
-            <tr>
-                <td>
-                    <a href="[payment_link]" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Pay Now</a>
-                </td>
-            </tr>
-        </table>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
-
-    // Other Email Templates
-    $form['email_settings']['other_templates'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Other Email Templates'),
-      '#open' => FALSE,
-    ];
-    $form['email_settings']['other_templates']['condition_charge'] = [
-        '#type' => 'details',
-        '#title' => $this->t('Condition Charge Notification'),
-        '#description' => $this->t('Sent via the confirmation form when an admin applies a manual charge for damage or missing parts.'),
-    ];
-    $form['email_settings']['other_templates']['condition_charge']['email_condition_charge_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_condition_charge_subject') ?: $this->t('Charge for tool damage or missing parts'),
-    ];
-    $form['email_settings']['other_templates']['condition_charge']['email_condition_charge_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_condition_charge_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #d9534f;">Notice: Damage/Missing Parts Charge</h2>
-        <p>Hi [borrower_name],</p>
-        <p>A charge of <strong>[amount_due]</strong> has been added to your account for the tool, <strong>[tool_name]</strong>, due to its condition upon return.</p>
-        <p>Please use the following link to pay:</p>
-        <table style="width: 100%; text-align: center; margin: 20px 0;">
-            <tr>
-                <td>
-                    <a href="[payment_link]" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Pay Now</a>
-                </td>
-            </tr>
-        </table>
-        <p>If you have any questions, please contact the staff.</p>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
-
-    $form['email_settings']['other_templates']['waitlist'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Waitlist Notification'),
-      '#description' => $this->t('Sent to the next person on the waitlist when a borrowed item is returned.'),
-    ];
-    $form['email_settings']['other_templates']['waitlist']['email_waitlist_notification_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_waitlist_notification_subject') ?: $this->t('A tool you are waiting for is now available'),
-    ];
-    $form['email_settings']['other_templates']['waitlist']['email_waitlist_notification_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_waitlist_notification_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #5cb85c;">Great News! A Tool is Available!</h2>
-        <p>Hi [borrower_name],</p>
-        <p>The tool, <strong>[tool_name]</strong>, that you were on the waitlist for has been returned and is now available for checkout.</p>
-        <p>Please be aware that this notification is sent to everyone on the waitlist. The tool is available on a first-come, first-served basis.</p>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
-
-    $form['email_settings']['other_templates']['checkout'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Checkout Confirmation Email'),
-    ];
-    $form['email_settings']['other_templates']['checkout']['subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_checkout_subject') ?: $this->t('Tool Checkout Confirmation: [tool_name]'),
-    ];
-    $form['email_settings']['other_templates']['checkout']['body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_checkout_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #0056a0;">Checkout Confirmation</h2>
-        <p>Hi [borrower_name],</p>
-        <p>You have successfully checked out the following tool:</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Tool:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[tool_name]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Replacement Value:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[replacement_value]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Due Date:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[due_date]</td>
-            </tr>
-        </table>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
-
-    $form['email_settings']['other_templates']['return'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Return Confirmation Email'),
-    ];
-    $form['email_settings']['other_templates']['return']['subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_return_subject') ?: $this->t('Tool Return Confirmation'),
-    ];
-    $form['email_settings']['other_templates']['return']['body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_return_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #5cb85c;">Return Confirmed</h2>
-        <p>Hi [borrower_name],</p>
-        <p>Thanks! Your return for <strong>[tool_name]</strong> has been recorded.</p>
-        <p>We appreciate you helping to keep our library running smoothly!</p>
-        <p>Thanks,<br>The MakeHaven Team</p>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
-
-    $form['email_settings']['other_templates']['issue_report'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Issue Report Email (to staff)'),
-    ];
-    $form['email_settings']['other_templates']['issue_report']['damaged'] = [
-      '#type' => 'details',
-      '#title' => $this->t('Damaged Item Notification'),
-      '#description' => $this->t('Sent to staff when a user reports an item as damaged.'),
-    ];
-    $form['email_settings']['other_templates']['issue_report']['damaged']['email_damaged_subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_damaged_subject') ?: $this->t('Damage Report: [tool_name]'),
-    ];
-    $form['email_settings']['other_templates']['issue_report']['damaged']['email_damaged_address'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('Damaged item notification email address(es)'),
-      '#description' => $this->t('The email address to which notifications for damaged items are sent. If left blank, this will fall back to the Administrative notification email address(es). Multiple addresses may be comma-separated.'),
-      '#default_value' => $config->get('email_damaged_address') ?: '',
-    ];
-    $form['email_settings']['other_templates']['issue_report']['damaged']['email_damaged_body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_damaged_body') ?: "A member has reported damage to a library item.\n\nTool: [tool_name]\nDetails: [notes]\nReported by: [reporter]\nItem page: [item_url]",
-        '#rows' => 15,
-    ];
-    $form['email_settings']['other_templates']['issue_report']['subject'] = [
-        '#type' => 'textfield',
-        '#title' => $this->t('Subject'),
-        '#default_value' => $config->get('email_issue_report_subject') ?: $this->t('Lending Library Issue Report: [tool_name]'),
-    ];
-    $form['email_settings']['other_templates']['issue_report']['body'] = [
-        '#type' => 'textarea',
-        '#title' => $this->t('Body'),
-        '#default_value' => $config->get('email_issue_report_body') ?: '<div style="font-family: sans-serif; padding: 20px; background-color: #f4f4f4; color: #333;">
-    <div style="max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 5px;">
-        <h2 style="color: #d9534f;">New Issue Report</h2>
-        <p>A member has submitted an issue report for a library item.</p>
-        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Tool:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[tool_name]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Issue Type:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[issue_type]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Details:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[notes]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Reported by:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;">[reporter]</td>
-            </tr>
-            <tr>
-                <td style="padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Item Page:</strong></td>
-                <td style="padding: 10px; border: 1px solid #ddd;"><a href="[item_url]">[item_url]</a></td>
-            </tr>
-        </table>
-    </div>
-</div>',
-        '#rows' => 15,
-    ];
+    // Unset the old structure
+    unset($form['email_settings']['due_soon']);
+    unset($form['email_settings']['overdue']);
+    unset($form['email_settings']['other_templates']);
+    unset($form['email_settings']['general']);
 
     $form['battery_return_message'] = [
       '#type' => 'textarea',
@@ -594,8 +286,6 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'email_damaged_subject',
       'email_damaged_body',
       'email_damaged_address',
-      'email_late_return_fee_subject',
-      'email_late_return_fee_body',
     ];
 
     foreach ($keys_to_save as $key) {

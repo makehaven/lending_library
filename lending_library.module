@@ -487,6 +487,8 @@ $replacements = [
   '[due_date]' => $due_date_display,
   '[replacement_value]' => number_format($replacement_value, 2),
   '[tool_replacement_charge]' => number_format($tool_replacement_charge, 2),
+  '[daily_late_fee]' => '$' . number_format($config->get('daily_late_fee') ?: 0, 2),
+  '[late_fee_cap_percentage]' => $config->get('late_fee_cap_percentage') ?: 100,
 ];
 
 $processed_terms = str_replace(array_keys($replacements), array_values($replacements), $terms_html);
