@@ -100,6 +100,7 @@ class LendingLibraryTestTriggerForm extends FormBase {
         'return_confirmation' => $this->t('Return Confirmation'),
         'waitlist_notification' => $this->t('Waitlist Notification'),
         'issue_report_notice' => $this->t('Issue Report (to Staff)'),
+        'late_return_fee' => $this->t('Late Return Fee'),
       ],
       '#required' => TRUE,
     ];
@@ -162,6 +163,9 @@ class LendingLibraryTestTriggerForm extends FormBase {
         'reporter' => 'Test Reporter',
         'item_url' => 'https://example.com/node/1',
         'transaction_id' => 999,
+        'days_late' => 5,
+        'daily_fee' => 2.50,
+        'late_fee_total' => 12.50,
     ];
 
     // We call the mail manager directly because we are not working with a real
