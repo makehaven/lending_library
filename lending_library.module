@@ -687,12 +687,7 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
             if ($due_date < $now) { // Is overdue.
                 $config = \Drupal::config('lending_library.settings');
                 $late_fee_details = _lending_library_calculate_late_fee($withdraw_transaction);
-                $unreturned_battery_charge = 0;
                 $final_late_fee = 0;
-
-                if (!$form_state->getValue('lending_library_return_batteries')) {
-                    $unreturned_battery_charge = _lending_library_calculate_unreturned_battery_value($withdraw_transaction);
-                }
 
                 if ($late_fee_details) {
                     $item_details = _lending_library_get_item_details($library_item_node);
@@ -702,17 +697,13 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
                     $final_late_fee = min($late_fee_details['late_fee'], $fee_cap);
                 }
 
-                $total_due = $final_late_fee + $unreturned_battery_charge;
-
-                if ($total_due > 0) {
+                if ($final_late_fee > 0) {
                     $transaction_entity->set('field_library_charge_overdue', $final_late_fee);
-                    $transaction_entity->set('field_library_charge_battery', $unreturned_battery_charge);
                     if ($transaction_entity->hasField('field_field_library_amount_due')) {
-                        $transaction_entity->set('field_field_library_amount_due', $total_due);
+                        $transaction_entity->set('field_field_library_amount_due', $final_late_fee);
                     }
-
                     $email_params = [
-                        'amount_due' => $total_due,
+                        'amount_due' => $final_late_fee,
                         'days_late' => $late_fee_details['days_late'] ?? 0,
                         'daily_fee' => $config->get('daily_late_fee'),
                         'late_fee_total' => $final_late_fee,
@@ -720,6 +711,20 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
                     _lending_library_send_email_by_key($transaction_entity, 'late_return_fee', $email_params);
                     $charge_applied = TRUE;
                 }
+            }
+
+            // This needs to be a separate check from the late fee check.
+            $unreturned_battery_charge = 0;
+            if (!$form_state->getValue('lending_library_return_batteries')) {
+                $unreturned_battery_charge = _lending_library_calculate_unreturned_battery_value($withdraw_transaction);
+            }
+
+            if ($unreturned_battery_charge > 0) {
+                $transaction_entity->set('field_library_charge_battery', $unreturned_battery_charge);
+                $current_due = $transaction_entity->hasField('field_field_library_amount_due') ? $transaction_entity->get('field_field_library_amount_due')->value : 0;
+                $transaction_entity->set('field_field_library_amount_due', $current_due + $unreturned_battery_charge);
+                _lending_library_send_email_by_key($transaction_entity, 'condition_charge', ['amount_due' => $unreturned_battery_charge]);
+                $charge_applied = TRUE;
             }
         }
 
