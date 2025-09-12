@@ -22,3 +22,5 @@ email_overdue_late_fee_subject: 'Late fee added for overdue tool'
 email_overdue_late_fee_body: "Hello [borrower_name],\n\nThe tool '[tool_name]' you borrowed is overdue. A late fee of [amount_due] has been applied to your account. Please return the tool as soon as possible to avoid further fees. You can pay the current balance here: [payment_link]"
 email_non_return_charge_subject: 'Charge for unreturned library tool'
 email_non_return_charge_body: "Hello [borrower_name],\n\nThe tool '[tool_name]' is now considered lost. You are being charged [amount_due] for its replacement. Please use the following link to pay: [payment_link]"
+email_late_return_fee_subject: 'Late Fee Charged for Tool Return'
+email_late_return_fee_body: "Hello [borrower_name],\n\nThank you for returning '[tool_name]'. It was returned [days_late] days overdue.\n\nA late fee of [late_fee_total] has been charged to your account. Please use the following link to pay: [payment_link]"

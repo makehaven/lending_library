@@ -133,12 +133,15 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
 
     $items_dates = [
       $this->t('<code>[due_date]</code>: The calculated due date for the loan.'),
+      $this->t('<code>[days_late]</code>: The number of days the item was overdue.'),
     ];
 
     $items_charges = [
       $this->t('<code>[replacement_value]</code>: The base replacement value of the tool.'),
       $this->t('<code>[tool_replacement_charge]</code>: The calculated replacement charge for the tool, including any markup.'),
       $this->t('<code>[unreturned_batteries_charge]</code>: The calculated replacement charge for any unreturned batteries.'),
+      $this->t('<code>[daily_fee]</code>: The daily late fee amount.'),
+      $this->t('<code>[late_fee_total]</code>: The total calculated late fee.'),
       $this->t('<code>[amount_due]</code>: The total amount due (tool charge + battery charge + other fees).'),
       $this->t('<code>[payment_link]</code>: A pre-filled link to the payment system.'),
     ];
@@ -243,6 +246,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
+    ];
+
+    $form['email_settings']['other_templates']['late_return_fee'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Late Return Fee Notification'),
+      '#description' => $this->t('Sent when a user returns an item late and a fee is charged.'),
+    ];
+    $form['email_settings']['other_templates']['late_return_fee']['email_late_return_fee_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_late_return_fee_subject') ?: $this->t('Late Fee Charged for Tool Return'),
+    ];
+    $form['email_settings']['other_templates']['late_return_fee']['email_late_return_fee_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_late_return_fee_body') ?: "Hello [borrower_name],\n\nThank you for returning '[tool_name]'. It was returned [days_late] days overdue.\n\nA late fee of [late_fee_total] has been charged to your account. Please use the following link to pay: [payment_link]",
         '#rows' => 15,
     ];
 
@@ -574,6 +594,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'email_damaged_subject',
       'email_damaged_body',
       'email_damaged_address',
+      'email_late_return_fee_subject',
+      'email_late_return_fee_body',
     ];
 
     foreach ($keys_to_save as $key) {
