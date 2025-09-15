@@ -1,0 +1,20 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_library_item_available_since
+    - node.type.library_item
+  module:
+    - datetime
+id: node.library_item.field_library_item_available_since
+field_name: field_library_item_available_since
+entity_type: node
+bundle: library_item
+label: 'Available Since'
+description: 'The date the item became available.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: datetime

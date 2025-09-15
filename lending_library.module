@@ -40,6 +40,7 @@ define('LENDING_LIBRARY_ITEM_STATUS_REPAIR', 'repair');
 define('LENDING_LIBRARY_ITEM_STATUS_RETIRED', 'retired');
 
 define('LENDING_LIBRARY_ACTION_WITHDRAW', 'withdraw');
+define('LENDING_LIBRARY_ACTION_RENEW', 'renew');
 define('LENDING_LIBRARY_ACTION_RETURN', 'return');
 define('LENDING_LIBRARY_ACTION_ISSUE', 'issue');
 
@@ -834,6 +835,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
         // Update tool.
         $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_BORROWED);
         $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, ['target_id' => $transaction_borrower_uid]);
+        $library_item_node->set('field_library_item_available_since', NULL);
         $save_item_node = TRUE;
 
         // Update selected batteries to "borrowed".
@@ -876,6 +878,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // Update tool status.
       $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE);
       $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
+      $library_item_node->set('field_library_item_available_since', date('Y-m-d H:i:s'));
       $save_item_node = TRUE;
 
       // Ensure return date is set on the transaction.
@@ -1096,6 +1099,29 @@ function lending_library_cron() {
   }
 
   $logger->notice('Lending library cron job finished.');
+
+  // Waitlist cleanup.
+  $waitlist_cleanup_days = $config->get('waitlist_cleanup_days') ?: 7;
+  if ($waitlist_cleanup_days > 0) {
+    $cleanup_date = (new DrupalDateTime("-{$waitlist_cleanup_days} days"))->format('Y-m-d H:i:s');
+    $query = \Drupal::entityQuery('node')
+      ->condition('type', LENDING_LIBRARY_ITEM_NODE_TYPE)
+      ->condition(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE)
+      ->condition('field_library_item_available_since', $cleanup_date, '<=')
+      ->accessCheck(FALSE);
+  }
+  $item_ids = $query->execute();
+
+  if (!empty($item_ids)) {
+    $items = \Drupal::entityTypeManager()->getStorage('node')->loadMultiple($item_ids);
+    foreach ($items as $item) {
+      if ($item->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$item->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
+        $item->set(LENDING_LIBRARY_ITEM_WAITLIST_FIELD, []);
+        $item->save();
+        $logger->notice('Cleared waitlist for item @nid.', ['@nid' => $item->id()]);
+      }
+    }
+  }
 }
 
 /**
@@ -1307,6 +1333,16 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
       if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $item_details['borrower_uid'] == $current_user->id()) {
         $url = Url::fromRoute('lending_library.return_form', ['node' => $library_item_node->id()]);
         $links['return'] = ['#type' => 'link', '#title' => t('Return This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
+
+        // Add renew button if not overdue and no waitlist.
+        $loan_details = _lending_library_get_current_loan_details($library_item_node);
+        $now = new DrupalDateTime();
+        if ($loan_details && $loan_details['due_date'] >= $now) {
+          if ($library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
+            $url = Url::fromRoute('lending_library.renew_form', ['node' => $library_item_node->id()]);
+            $links['renew'] = ['#type' => 'link', '#title' => t('Renew Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
+          }
+        }
       }
       if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_REPAIR, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
         $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
@@ -1675,6 +1711,11 @@ function lending_library_mail($key, &$message, $params) {
     case 'late_return_fee':
       $subject = $cfg->get('email_late_return_fee_subject') ?: 'Late Fee Charged for Tool Return';
       $body_template = $cfg->get('email_late_return_fee_body') ?: "Hello [borrower_name],\n\nThank you for returning '[tool_name]'. It was returned [days_late] days overdue.\n\nA late fee of [late_fee_total] has been charged to your account. Please use the following link to pay: [payment_link]";
+      break;
+
+    case 'renewal_confirmation':
+      $subject = $cfg->get('email_renewal_confirmation_subject') ?: 'Tool Renewal Confirmation';
+      $body_template = $cfg->get('email_renewal_confirmation_body') ?: "Hello [borrower_name],\n\nYou have successfully renewed '[tool_name]'. It is now due on [due_date].";
       break;
   }
 

@@ -1,4 +1,3 @@
-uuid: ce7482c4-f6cb-4b78-b06c-a3cf2ffe254e
 langcode: en
 status: true
 dependencies:
@@ -9,14 +8,16 @@ id: library_transaction.library_transaction.field_library_renew_count
 field_name: field_library_renew_count
 entity_type: library_transaction
 bundle: library_transaction
-label: 'Library Renew count'
-description: ''
+label: 'Renew Count'
+description: 'The number of times the loan has been renewed.'
 required: false
 translatable: false
-default_value: {  }
+default_value:
+  -
+    value: 0
 default_value_callback: ''
 settings:
-  min: null
+  min: 0
   max: null
   prefix: ''
   suffix: ''

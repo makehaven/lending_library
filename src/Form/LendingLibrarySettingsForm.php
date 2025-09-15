@@ -65,6 +65,20 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#field_prefix' => '$',
     ];
 
+    $form['waitlist_settings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Waitlist Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['waitlist_settings']['waitlist_cleanup_days'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Waitlist cleanup days'),
+      '#description' => $this->t('The number of days an item must be available before the waitlist is cleared. Set to 0 to disable.'),
+      '#default_value' => $config->get('waitlist_cleanup_days') ?: 7,
+      '#min' => 0,
+    ];
+
     $form['fee_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Fee and Fine Settings'),
@@ -598,6 +612,7 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'prevent_checkout_with_overdue',
       'max_tool_count',
       'max_tool_value',
+      'waitlist_cleanup_days',
       'daily_late_fee',
       'late_fee_cap_percentage',
       'overdue_charge_days',
