@@ -835,7 +835,9 @@ function lending_library_entity_insert(EntityInterface $entity) {
         // Update tool.
         $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_BORROWED);
         $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, ['target_id' => $transaction_borrower_uid]);
-        $library_item_node->set('field_library_item_available_since', NULL);
+        if ($library_item_node->hasField('field_item_available_since')) {
+          $library_item_node->set('field_item_available_since', NULL);
+        }
         $save_item_node = TRUE;
 
         // Update selected batteries to "borrowed".
@@ -878,7 +880,9 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // Update tool status.
       $library_item_node->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE);
       $library_item_node->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
-      $library_item_node->set('field_library_item_available_since', date('Y-m-d H:i:s'));
+      if ($library_item_node->hasField('field_item_available_since')) {
+        $library_item_node->set('field_item_available_since', date('Y-m-d\TH:i:s'));
+      }
       $save_item_node = TRUE;
 
       // Ensure return date is set on the transaction.
@@ -1098,30 +1102,33 @@ function lending_library_cron() {
     }
   }
 
-  $logger->notice('Lending library cron job finished.');
-
   // Waitlist cleanup.
-  $waitlist_cleanup_days = $config->get('waitlist_cleanup_days') ?: 7;
+  $waitlist_cleanup_days = $config->get('waitlist_cleanup_days');
   if ($waitlist_cleanup_days > 0) {
-    $cleanup_date = (new DrupalDateTime("-{$waitlist_cleanup_days} days"))->format('Y-m-d H:i:s');
+    $cleanup_interval = new \DateInterval("P{$waitlist_cleanup_days}D");
+    $cleanup_threshold = (clone $now)->sub($cleanup_interval);
+
     $query = \Drupal::entityQuery('node')
       ->condition('type', LENDING_LIBRARY_ITEM_NODE_TYPE)
       ->condition(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE)
-      ->condition('field_library_item_available_since', $cleanup_date, '<=')
+      ->condition('field_item_available_since', $cleanup_threshold->format('Y-m-d\TH:i:s'), '<=')
       ->accessCheck(FALSE);
-  }
-  $item_ids = $query->execute();
+    $item_ids_to_clear = $query->execute();
 
-  if (!empty($item_ids)) {
-    $items = \Drupal::entityTypeManager()->getStorage('node')->loadMultiple($item_ids);
-    foreach ($items as $item) {
-      if ($item->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$item->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
-        $item->set(LENDING_LIBRARY_ITEM_WAITLIST_FIELD, []);
-        $item->save();
-        $logger->notice('Cleared waitlist for item @nid.', ['@nid' => $item->id()]);
+    if (!empty($item_ids_to_clear)) {
+      $items_to_clear = \Drupal::entityTypeManager()->getStorage('node')->loadMultiple($item_ids_to_clear);
+      foreach ($items_to_clear as $item) {
+        if ($item->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$item->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
+          $item->set(LENDING_LIBRARY_ITEM_WAITLIST_FIELD, []);
+          $item->set('field_item_available_since', NULL);
+          $item->save();
+          $logger->notice('Cleared waitlist for item @nid.', ['@nid' => $item->id()]);
+        }
       }
     }
   }
+
+  $logger->notice('Lending library cron job finished.');
 }
 
 /**
@@ -1334,14 +1341,33 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
         $url = Url::fromRoute('lending_library.return_form', ['node' => $library_item_node->id()]);
         $links['return'] = ['#type' => 'link', '#title' => t('Return This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
 
-        // Add renew button if not overdue and no waitlist.
+        // Add a "Renew" button.
+        $config = \Drupal::config('lending_library.settings');
+        $max_renewals = $config->get('max_renewal_count');
         $loan_details = _lending_library_get_current_loan_details($library_item_node);
         $now = new DrupalDateTime();
-        if ($loan_details && $loan_details['due_date'] >= $now) {
-          if ($library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
-            $url = Url::fromRoute('lending_library.renew_form', ['node' => $library_item_node->id()]);
-            $links['renew'] = ['#type' => 'link', '#title' => t('Renew Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
+
+        // Get the renewal count from the latest transaction.
+        $t_query = \Drupal::entityQuery('library_transaction')
+          ->condition(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, $library_item_node->id())
+          ->condition(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, 'withdraw')
+          ->sort('created', 'DESC')
+          ->range(0, 1)
+          ->accessCheck(FALSE);
+        $t_ids = $t_query->execute();
+        $renew_count = 0;
+        if (!empty($t_ids)) {
+          $transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load(reset($t_ids));
+          if ($transaction->hasField(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD) && !$transaction->get(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD)->isEmpty()) {
+            $renew_count = $transaction->get(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD)->value;
           }
+        }
+
+        if ($loan_details['due_date'] > $now &&
+            ($max_renewals == 0 || $renew_count < $max_renewals) &&
+            (!$library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) || $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty())) {
+          $url = Url::fromRoute('lending_library.renew', ['node' => $library_item_node->id()]);
+          $links['renew'] = ['#type' => 'link', '#title' => t('Renew Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
         }
       }
       if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_REPAIR, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
@@ -1724,4 +1750,3 @@ function lending_library_mail($key, &$message, $params) {
     $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $body_template);
   }
 }
-

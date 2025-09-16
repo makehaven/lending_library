@@ -101,13 +101,16 @@ class LibraryTransactionController extends ControllerBase {
       throw new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException();
     }
 
-    $item_details = _lending_library_get_item_details($node);
-    if ($item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_BORROWED || $item_details['borrower_uid'] !== $this->currentUser()->id()) {
+    // Since _lending_library_get_item_details is in the .module file,
+    // it's in the global namespace.
+    $item_details = \_lending_library_get_item_details($node);
+
+    if (empty($item_details) || $item_details['status'] !== 'borrowed' || $item_details['borrower_uid'] != $this->currentUser()->id()) {
       $this->messenger()->addError($this->t('You cannot renew this item.'));
       return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
     }
 
-    if ($node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
+    if ($node->hasField('field_library_item_waitlist') && !$node->get('field_library_item_waitlist')->isEmpty()) {
       $this->messenger()->addError($this->t('You cannot renew this item because there is a waitlist.'));
       return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
     }
@@ -127,7 +130,7 @@ class LibraryTransactionController extends ControllerBase {
     }
 
     $transaction = $this->entityTypeManager->getStorage('library_transaction')->load(reset($transaction_ids));
-    $due_date = $transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
+    $due_date = $transaction->get('field_library_due_date')->date;
     $now = new DrupalDateTime();
 
     if ($due_date < $now) {
@@ -135,20 +138,50 @@ class LibraryTransactionController extends ControllerBase {
       return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
     }
 
+    $config = $this->config('lending_library.settings');
+    $max_renewals = $config->get('max_renewal_count');
+    $renew_count = 0;
+    if ($transaction->hasField('field_library_renew_count') && !$transaction->get('field_library_renew_count')->isEmpty()) {
+      $renew_count = $transaction->get('field_library_renew_count')->value;
+    }
+
+    if ($max_renewals > 0 && $renew_count >= $max_renewals) {
+      $this->messenger()->addError($this->t('You have reached the maximum number of renewals for this item.'));
+      return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
+    }
+
+    // All checks passed, proceed with renewal.
     $new_due_date = new DrupalDateTime();
     $new_due_date->modify('+7 days');
-    $transaction->set(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD, $new_due_date->format('Y-m-d H:i:s'));
 
-    $renew_count = $transaction->get(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD)->value;
-    $transaction->set(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD, $renew_count + 1);
-
+    // Update the original withdraw transaction.
+    $transaction->set('field_library_due_date', $new_due_date->format('Y-m-d H:i:s'));
+    $transaction->set('field_library_renew_count', $renew_count + 1);
     $transaction->save();
 
-    _lending_library_send_email_by_key($transaction, 'renewal_confirmation', [
+    // Create a new 'renew' transaction for logging purposes.
+    $renew_transaction_values = [
+      'type' => 'library_transaction',
+      'field_library_item' => ['target_id' => $node->id()],
+      'field_library_action' => 'renew',
+      'field_library_borrower' => ['target_id' => $this->currentUser()->id()],
+      'uid' => $this->currentUser()->id(),
+      'field_library_due_date' => $new_due_date->format('Y-m-d'),
+    ];
+    $renew_transaction = $this->entityTypeManager
+      ->getStorage('library_transaction')
+      ->create($renew_transaction_values);
+    $renew_transaction->save();
+
+    // Send email notification.
+    \_lending_library_send_email_by_key($renew_transaction, 'renewal_confirmation', [
       'due_date' => $new_due_date->format('F j, Y'),
     ]);
 
-    $this->messenger()->addStatus($this->t('You have successfully renewed %title.', ['%title' => $node->label()]));
+    $this->messenger()->addStatus($this->t('You have successfully renewed %title. It is now due on @date.', [
+      '%title' => $node->label(),
+      '@date' => $new_due_date->format('F j, Y'),
+    ]));
     return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
   }
 

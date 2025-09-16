@@ -26,7 +26,7 @@ lending_library.return_form:
       node:
         type: entity:node
 
-lending_library.renew_form:
+lending_library.renew:
   path: '/library-item/{node}/renew'
   defaults:
     _title: 'Renew Item'
