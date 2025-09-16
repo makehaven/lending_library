@@ -155,7 +155,7 @@ class LibraryTransactionController extends ControllerBase {
     $new_due_date->modify('+7 days');
 
     // Update the original withdraw transaction.
-    $transaction->set('field_library_due_date', $new_due_date->format('Y-m-d H:i:s'));
+    $transaction->set('field_library_due_date', $new_due_date->format('Y-m-d\TH:i:s'));
     $transaction->set('field_library_renew_count', $renew_count + 1);
     $transaction->save();
 

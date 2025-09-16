@@ -23,51 +23,67 @@ function lending_library_update_9001() {
  * Add field_item_available_since field.
  */
 function lending_library_update_10002() {
-  $field_storage_definition = \Drupal\field\Entity\FieldStorageConfig::create([
-    'field_name' => 'field_item_available_since',
-    'entity_type' => 'node',
-    'type' => 'datetime',
-    'settings' => ['datetime_type' => 'date'],
-    'cardinality' => 1,
-  ]);
-  $field_storage_definition->save();
+  $field_storage_manager = \Drupal::entityTypeManager()->getStorage('field_storage_config');
+  $field_manager = \Drupal::entityTypeManager()->getStorage('field_config');
 
-  $field_definition = \Drupal\field\Entity\FieldConfig::create([
-    'field_storage' => $field_storage_definition,
-    'bundle' => 'library_item',
-    'label' => 'Available Since',
-    'description' => 'The date the item became available.',
-    'required' => FALSE,
-    'translatable' => FALSE,
-    'default_value' => [],
-    'settings' => [],
-  ]);
-  $field_definition->save();
+  if (!$field_storage_manager->load('node.field_item_available_since')) {
+    $field_storage_definition = $field_storage_manager->create([
+      'field_name' => 'field_item_available_since',
+      'entity_type' => 'node',
+      'type' => 'datetime',
+      'settings' => ['datetime_type' => 'datetime'],
+      'cardinality' => 1,
+    ]);
+    $field_storage_definition->save();
+  }
+
+  if (!$field_manager->load('node.library_item.field_item_available_since')) {
+    $field_definition = $field_manager->create([
+      'field_name' => 'field_item_available_since',
+      'entity_type' => 'node',
+      'bundle' => 'library_item',
+      'label' => 'Available Since',
+      'description' => 'The date the item became available.',
+      'required' => FALSE,
+      'translatable' => FALSE,
+      'default_value' => [],
+      'settings' => [],
+    ]);
+    $field_definition->save();
+  }
 }
 
 /**
  * Add field_library_renew_count field.
  */
 function lending_library_update_10003() {
-  $field_storage_definition = \Drupal\field\Entity\FieldStorageConfig::create([
-    'field_name' => 'field_library_renew_count',
-    'entity_type' => 'library_transaction',
-    'type' => 'integer',
-    'settings' => [],
-    'cardinality' => 1,
-  ]);
-  $field_storage_definition->save();
+  $field_storage_manager = \Drupal::entityTypeManager()->getStorage('field_storage_config');
+  $field_manager = \Drupal::entityTypeManager()->getStorage('field_config');
 
-  $field_definition = \Drupal\field\Entity\FieldConfig::create([
-    'field_storage' => $field_storage_definition,
-    'bundle' => 'library_transaction',
-    'label' => 'Renew Count',
-    'description' => 'The number of times this loan has been renewed.',
-    'required' => FALSE,
-    'default_value' => [['value' => 0]],
-    'settings' => [
-      'min' => 0,
-    ],
-  ]);
-  $field_definition->save();
+  if (!$field_storage_manager->load('library_transaction.field_library_renew_count')) {
+    $field_storage_definition = $field_storage_manager->create([
+      'field_name' => 'field_library_renew_count',
+      'entity_type' => 'library_transaction',
+      'type' => 'integer',
+      'settings' => [],
+      'cardinality' => 1,
+    ]);
+    $field_storage_definition->save();
+  }
+
+  if (!$field_manager->load('library_transaction.library_transaction.field_library_renew_count')) {
+    $field_definition = $field_manager->create([
+      'field_name' => 'field_library_renew_count',
+      'entity_type' => 'library_transaction',
+      'bundle' => 'library_transaction',
+      'label' => 'Renew Count',
+      'description' => 'The number of times this loan has been renewed.',
+      'required' => FALSE,
+      'default_value' => [['value' => 0]],
+      'settings' => [
+        'min' => 0,
+      ],
+    ]);
+    $field_definition->save();
+  }
 }

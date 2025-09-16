@@ -816,11 +816,32 @@ function lending_library_entity_insert(EntityInterface $entity) {
     // WITHDRAW
     // ---------------------------
     case LENDING_LIBRARY_ACTION_WITHDRAW:
-      $current = $library_item_node->get(LENDING_LIBRARY_ITEM_STATUS_FIELD)->isEmpty()
-        ? LENDING_LIBRARY_ITEM_STATUS_AVAILABLE
-        : $library_item_node->get(LENDING_LIBRARY_ITEM_STATUS_FIELD)->value;
+      $item_details = _lending_library_get_item_details($library_item_node);
 
-      if ($current === LENDING_LIBRARY_ITEM_STATUS_AVAILABLE && $transaction_borrower_uid) {
+      // Failsafe: If the item is being withdrawn but is still marked as
+      // borrowed, it means a return was missed. We should close the previous
+      // loan by creating a programmatic return transaction.
+      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid']) {
+        $storage = \Drupal::entityTypeManager()->getStorage('library_transaction');
+        $return_values = [
+          'type' => 'library_transaction',
+          'field_library_item' => $library_item_node->id(),
+          'field_library_action' => LENDING_LIBRARY_ACTION_RETURN,
+          'field_library_borrower' => $item_details['borrower_uid'],
+          'uid' => $item_details['borrower_uid'], // Or system user (0)?
+          'field_library_return_date' => date('Y-m-d\TH:i:s'),
+          'field_library_inspection_notes' => 'Automatic return processed due to new withdrawal.',
+        ];
+        $programmatic_return = $storage->create($return_values);
+        $programmatic_return->save();
+
+        // Reload the node to get the updated status.
+        \Drupal::entityTypeManager()->getStorage('node')->resetCache([$library_item_node->id()]);
+        $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node->id());
+      }
+
+      // Now, proceed with the withdrawal.
+      if ($transaction_borrower_uid) {
         // If the borrower is on the waitlist, remove them.
         if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
           $waitlist_items = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
@@ -896,6 +917,30 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // If you added a "closed" boolean on transactions, mark it.
       if ($entity->hasField('field_library_closed')) {
         try { $entity->set('field_library_closed', 1); } catch (\Exception $ignore) {}
+      }
+
+      // Now, find the original withdraw transaction and close it.
+      $query = \Drupal::entityQuery('library_transaction')
+        ->condition('field_library_item', $library_item_node->id())
+        ->condition('field_library_borrower', $transaction_borrower_uid)
+        ->condition('field_library_action', 'withdraw')
+        ->condition('field_library_closed', 1, '<>')
+        ->sort('created', 'DESC')
+        ->range(0, 1)
+        ->accessCheck(FALSE);
+      $open_withdraw_ids = $query->execute();
+
+      if (!empty($open_withdraw_ids)) {
+        $open_withdraw_transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load(reset($open_withdraw_ids));
+        if ($open_withdraw_transaction) {
+          if ($open_withdraw_transaction->hasField('field_library_closed')) {
+            $open_withdraw_transaction->set('field_library_closed', 1);
+          }
+          if ($open_withdraw_transaction->hasField(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD) && $entity->hasField(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)) {
+            $open_withdraw_transaction->set(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD, $entity->get(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)->value);
+          }
+          $open_withdraw_transaction->save();
+        }
       }
       break;
 
@@ -1157,8 +1202,8 @@ function _lending_library_calculate_late_fee(EntityInterface $transaction) {
   $due_date = $transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
   $now = new DrupalDateTime('now');
 
-  if ($due_date >= $now) {
-    return NULL; // Not overdue.
+  if (!$due_date instanceof DrupalDateTime || $due_date >= $now) {
+    return NULL; // Not overdue or date is invalid.
   }
 
   $days_late = $due_date->diff($now)->days;
