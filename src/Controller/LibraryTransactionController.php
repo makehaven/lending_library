@@ -159,6 +159,9 @@ class LibraryTransactionController extends ControllerBase {
     $transaction->set('field_library_renew_count', $renew_count + 1);
     $transaction->save();
 
+    // Clear the cache for this entity to ensure views are updated.
+    $this->entityTypeManager->getStorage('library_transaction')->resetCache([$transaction->id()]);
+
     // Create a new 'renew' transaction for logging purposes.
     $renew_transaction_values = [
       'type' => 'library_transaction',
