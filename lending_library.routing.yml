@@ -26,12 +26,25 @@ lending_library.return_form:
       node:
         type: entity:node
 
-lending_library.issue_form:
-  path: '/library-item/{node}/report-issue' 
+lending_library.renew:
+  path: '/library-item/{node}/renew'
   defaults:
-    _title: 'Report Issue' 
+    _title: 'Renew Item'
+    _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::renew'
+  requirements:
+    _permission: 'create library_transaction entities'
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: entity:node
+
+lending_library.issue_form:
+  path: '/library-item/{node}/report-issue'
+  defaults:
+    _title: 'Report Issue'
     _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
-    action_type: 'issue' 
+    action_type: 'issue'
   requirements:
     _permission: 'create library_transaction entities'
     node: \d+

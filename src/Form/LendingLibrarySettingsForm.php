@@ -65,6 +65,28 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#field_prefix' => '$',
     ];
 
+    $form['loan_settings']['max_renewal_count'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Maximum Renewals'),
+      '#description' => $this->t('The maximum number of times a loan can be renewed. Set to 0 for unlimited renewals.'),
+      '#default_value' => $config->get('max_renewal_count') ?: 1,
+      '#min' => 0,
+    ];
+
+    $form['waitlist_settings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Waitlist Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['waitlist_settings']['waitlist_cleanup_days'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Waitlist cleanup days'),
+      '#description' => $this->t('The number of days an item must be available before the waitlist is cleared. Set to 0 to disable.'),
+      '#default_value' => $config->get('waitlist_cleanup_days') ?: 7,
+      '#min' => 0,
+    ];
+
     $form['fee_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Fee and Fine Settings'),
@@ -260,6 +282,22 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
         <p>Thanks,<br>The MakeHaven Team</p>
     </div>
 </div>',
+        '#rows' => 15,
+    ];
+
+    $form['email_settings']['loan_workflow']['renewal'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Renewal Confirmation Email'),
+    ];
+    $form['email_settings']['loan_workflow']['renewal']['email_renewal_confirmation_subject'] = [
+        '#type' => 'textfield',
+        '#title' => $this->t('Subject'),
+        '#default_value' => $config->get('email_renewal_confirmation_subject') ?: $this->t('Tool Renewal Confirmation'),
+    ];
+    $form['email_settings']['loan_workflow']['renewal']['email_renewal_confirmation_body'] = [
+        '#type' => 'textarea',
+        '#title' => $this->t('Body'),
+        '#default_value' => $config->get('email_renewal_confirmation_body') ?: 'Hello [borrower_name],\n\nYou have successfully renewed \'[tool_name]\'. It is now due on [due_date].',
         '#rows' => 15,
     ];
 
@@ -598,6 +636,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'prevent_checkout_with_overdue',
       'max_tool_count',
       'max_tool_value',
+      'max_renewal_count',
+      'waitlist_cleanup_days',
       'daily_late_fee',
       'late_fee_cap_percentage',
       'overdue_charge_days',
@@ -629,6 +669,8 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'email_damaged_address',
       'email_late_return_fee_subject',
       'email_late_return_fee_body',
+      'email_renewal_confirmation_subject',
+      'email_renewal_confirmation_body',
     ];
 
     foreach ($keys_to_save as $key) {
