@@ -54,7 +54,7 @@ class ToolStatusUpdateTest extends KernelTestBase {
     $this->installEntitySchema('user');
     $this->installEntitySchema('node');
     $this->installEntitySchema('eck_entity');
-    $this->installConfig(['field', 'node', 'lending_library']);
+    $this->installConfig(['field', 'node', 'lending_library', 'eck']);
 
     // Create a user to be the borrower.
     $this->borrower = User::create([
@@ -110,6 +110,11 @@ class ToolStatusUpdateTest extends KernelTestBase {
         'label' => 'Library Transaction',
         'eck_entity_type' => 'library_transaction',
     ])->save();
+
+    EckEntity::create([
+        'eck_entity_type' => 'library_transaction',
+        'type' => 'library_transaction',
+    ]);
 
 
     // Create fields for the library_transaction entity.
@@ -202,8 +207,6 @@ class ToolStatusUpdateTest extends KernelTestBase {
     ]);
     $withdraw_transaction->save();
 
-    // After the transaction is saved, the tool status should be 'borrowed'.
-    // We need to reload the node to get the updated values.
     $this->container->get('entity_type.manager')->getStorage('node')->resetCache([$this->tool->id()]);
     $updated_tool = Node::load($this->tool->id());
 
@@ -222,7 +225,6 @@ class ToolStatusUpdateTest extends KernelTestBase {
     ]);
     $return_transaction->save();
 
-    // After the return transaction, the tool status should be 'available'.
     $this->container->get('entity_type.manager')->getStorage('node')->resetCache([$this->tool->id()]);
     $returned_tool = Node::load($this->tool->id());
 
@@ -237,7 +239,7 @@ class ToolStatusUpdateTest extends KernelTestBase {
         'type' => 'library_transaction',
         'field_library_item' => $this->tool->id(),
         'field_library_action' => 'return',
-        'field_library_borrower' => $this->borrower->id(), // This might not be set for a repair case
+        'field_library_borrower' => $this->borrower->id(),
         'uid' => $this->borrower->id(),
         'field_library_inspection_issues' => 'no_issues',
     ]);

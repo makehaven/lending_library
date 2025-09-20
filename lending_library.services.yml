@@ -1,11 +1,7 @@
 services:
-  lending_library.manager:
-    class: Drupal\lending_library\Service\LendingLibraryManager
-    arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time']
-
   lending_library.tool_status_updater:
     class: Drupal\lending_library\Service\ToolStatusUpdater
-    arguments: ['@entity_type.manager', '@logger.factory', '@lending_library.manager']
+    arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time']
 
   lending_library.transaction_subscriber:
     class: Drupal\lending_library\EventSubscriber\TransactionSubscriber

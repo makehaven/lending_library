@@ -7,8 +7,6 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Drupal\eck\EckEntityInterface;
 use Drupal\user\Entity\User;
-use Symfony\Component\DependencyInjection\ContainerInterface;
-use Drupal\lending_library\Service\LendingLibraryManager;
 
 /**
  * Defines a confirmation form for sending a damage charge email.
@@ -21,32 +19,6 @@ class DamageChargeConfirmForm extends ConfirmFormBase {
    * @var \Drupal\eck\EckEntityInterface
    */
   protected $libraryTransaction;
-
-  /**
-   * The lending library manager service.
-   *
-   * @var \Drupal\lending_library\Service\LendingLibraryManager
-   */
-  protected $lendingLibraryManager;
-
-  /**
-   * Constructs a new DamageChargeConfirmForm object.
-   *
-   * @param \Drupal\lending_library\Service\LendingLibraryManager $lending_library_manager
-   *   The lending library manager service.
-   */
-  public function __construct(LendingLibraryManager $lending_library_manager) {
-    $this->lendingLibraryManager = $lending_library_manager;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function create(ContainerInterface $container) {
-    return new static(
-      $container->get('lending_library.manager')
-    );
-  }
 
   /**
    * {@inheritdoc}
@@ -141,7 +113,10 @@ class DamageChargeConfirmForm extends ConfirmFormBase {
     }
 
     if ($amount_due > 0) {
-      $this->lendingLibraryManager->sendEmailByKey($this->libraryTransaction, 'condition_charge', [
+      // The function _lending_library_send_email_by_key is defined in lending_library.module.
+      // We need to ensure that module is loaded.
+      \Drupal::moduleHandler()->loadInclude('lending_library', 'module');
+      _lending_library_send_email_by_key($this->libraryTransaction, 'condition_charge', [
         'amount_due' => $amount_due,
         'transaction_id' => $this->libraryTransaction->id(),
       ]);
