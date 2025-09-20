@@ -22,10 +22,13 @@ class LibraryTransactionController extends ControllerBase {
   /**
    * Constructs a new LibraryTransactionController.
    */
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, EntityFormBuilderInterface $entity_form_builder, AccountProxyInterface $current_user) {
+  protected $lendingLibraryManager;
+
+  public function __construct(EntityTypeManagerInterface $entity_type_manager, EntityFormBuilderInterface $entity_form_builder, AccountProxyInterface $current_user, \Drupal\lending_library\Service\LendingLibraryManager $lending_library_manager) {
     $this->entityTypeManager = $entity_type_manager;
     $this->entityFormBuilder = $entity_form_builder;
     $this->currentUser = $current_user;
+    $this->lendingLibraryManager = $lending_library_manager;
   }
 
   /**
@@ -35,7 +38,8 @@ class LibraryTransactionController extends ControllerBase {
     return new static(
       $container->get('entity_type.manager'),
       $container->get('entity.form_builder'),
-      $container->get('current_user')
+      $container->get('current_user'),
+      $container->get('lending_library.manager')
     );
   }
 
@@ -101,9 +105,7 @@ class LibraryTransactionController extends ControllerBase {
       throw new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException();
     }
 
-    // Since _lending_library_get_item_details is in the .module file,
-    // it's in the global namespace.
-    $item_details = \_lending_library_get_item_details($node);
+    $item_details = $this->lendingLibraryManager->getItemDetails($node);
 
     if (empty($item_details) || $item_details['status'] !== 'borrowed' || $item_details['borrower_uid'] != $this->currentUser()->id()) {
       $this->messenger()->addError($this->t('You cannot renew this item.'));
@@ -174,7 +176,7 @@ class LibraryTransactionController extends ControllerBase {
     $renew_transaction->save();
 
     // Send email notification.
-    \_lending_library_send_email_by_key($renew_transaction, 'renewal_confirmation', [
+    $this->lendingLibraryManager->sendEmailByKey($renew_transaction, 'renewal_confirmation', [
       'due_date' => $new_due_date->format('F j, Y'),
     ]);
 
