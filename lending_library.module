@@ -790,6 +790,8 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
  * Drop-in replacement for lending_library_entity_insert().
  */
 function lending_library_entity_insert(EntityInterface $entity) {
+  _lending_library_update_tool_status($entity);
+
   // Only handle Library Transaction inserts.
   if ($entity->getEntityTypeId() !== 'library_transaction' || $entity->bundle() !== 'library_transaction') {
     return;
@@ -1801,4 +1803,24 @@ function lending_library_mail($key, &$message, $params) {
     $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $subject);
     $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $body_template);
   }
+}
+
+/**
+ * Helper to update tool status from a library transaction.
+ */
+function _lending_library_update_tool_status(EntityInterface $entity) {
+  if ($entity->getEntityTypeId() === 'library_transaction') {
+    /** @var \Drupal\lending_library\Service\ToolStatusUpdater $updater */
+    $updater = \Drupal::service('lending_library.tool_status_updater');
+    if ($updater) {
+      $updater->updateFromTransaction($entity);
+    }
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function lending_library_entity_update(EntityInterface $entity) {
+  _lending_library_update_tool_status($entity);
 }

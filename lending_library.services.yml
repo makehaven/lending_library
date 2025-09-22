@@ -2,9 +2,3 @@ services:
   lending_library.tool_status_updater:
     class: Drupal\lending_library\Service\ToolStatusUpdater
     arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time']
-
-  lending_library.transaction_subscriber:
-    class: Drupal\lending_library\EventSubscriber\TransactionSubscriber
-    arguments: ['@lending_library.tool_status_updater']
-    tags:
-      - { name: event_subscriber }
