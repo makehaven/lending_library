@@ -1,0 +1,4 @@
+services:
+  lending_library.tool_status_updater:
+    class: Drupal\lending_library\Service\ToolStatusUpdater
+    arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time']

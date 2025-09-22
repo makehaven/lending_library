@@ -341,9 +341,16 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
           if (isset($form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD]['#access'] = FALSE;
           if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] = FALSE;
           if (isset($form['field_library_borrow_inspect_img'])) $form['field_library_borrow_inspect_img']['#access'] = FALSE;
-          if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#access'] = FALSE;
-          if (isset($form['field_library_inspection_notes'])) $form['field_library_inspection_notes']['#access'] = FALSE;
           if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD]['#disabled'] = TRUE;
+
+          if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) {
+            $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#title'] = t('Did you have any issues with this tool?');
+            $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#required'] = TRUE;
+            $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['widget']['#default_value'] = LENDING_LIBRARY_INSPECTION_NO_ISSUES;
+          }
+          if (isset($form['field_library_inspection_notes'])) {
+            $form['field_library_inspection_notes']['#title'] = t('If you had issues, please describe them');
+          }
   
           // Offer to also return associated batteries (if any).
           if ($library_item_node instanceof \Drupal\node\NodeInterface) {
@@ -783,6 +790,8 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
  * Drop-in replacement for lending_library_entity_insert().
  */
 function lending_library_entity_insert(EntityInterface $entity) {
+  _lending_library_update_tool_status($entity);
+
   // Only handle Library Transaction inserts.
   if ($entity->getEntityTypeId() !== 'library_transaction' || $entity->bundle() !== 'library_transaction') {
     return;
@@ -886,8 +895,8 @@ function lending_library_entity_insert(EntityInterface $entity) {
                   '@uid'  => $transaction_borrower_uid,
                 ])
               );
-              
-              
+
+
             }
           }
         }
@@ -1001,8 +1010,8 @@ function lending_library_entity_insert(EntityInterface $entity) {
                     '@nid'  => $library_item_node->id(),
                   ])
                 );
-                
-                
+
+
               }
             }
           } catch (\Exception $e) {
@@ -1024,7 +1033,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
       );
     }
   }
-  
+
 }
 
 /**
@@ -1432,7 +1441,7 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
       }
       if ($item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_RETIRED) {
         $url = Url::fromRoute('lending_library.issue_form', ['node' => $library_item_node->id()]);
-        $links['report_issue'] = ['#type' => 'link', '#title' => t('Report Issue'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--warning', 'lending-library-button']]];
+        $links['report_issue'] = ['#type' => 'link', '#title' => t('More actions'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--warning', 'lending-library-button']]];
       }
     }
     if (!empty($links)) {
@@ -1794,4 +1803,24 @@ function lending_library_mail($key, &$message, $params) {
     $message['subject'] = str_replace(array_keys($replacements), array_values($replacements), $subject);
     $message['body'][] = str_replace(array_keys($replacements), array_values($replacements), $body_template);
   }
+}
+
+/**
+ * Helper to update tool status from a library transaction.
+ */
+function _lending_library_update_tool_status(EntityInterface $entity) {
+  if ($entity->getEntityTypeId() === 'library_transaction') {
+    /** @var \Drupal\lending_library\Service\ToolStatusUpdater $updater */
+    $updater = \Drupal::service('lending_library.tool_status_updater');
+    if ($updater) {
+      $updater->updateFromTransaction($entity);
+    }
+  }
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function lending_library_entity_update(EntityInterface $entity) {
+  _lending_library_update_tool_status($entity);
 }
