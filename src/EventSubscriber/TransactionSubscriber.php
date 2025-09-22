@@ -2,8 +2,6 @@
 
 namespace Drupal\lending_library\EventSubscriber;
 
-use Drupal\Core\Entity\EntityEvents;
-
 use Drupal\lending_library\Service\ToolStatusUpdater;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Drupal\Core\Entity\EntityEvents;
