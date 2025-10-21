@@ -830,7 +830,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // Failsafe: If the item is being withdrawn but is still marked as
       // borrowed, it means a return was missed. We should close the previous
       // loan by creating a programmatic return transaction.
-      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid']) {
+      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && $item_details['borrower_uid'] != $transaction_borrower_uid) {
         $storage = \Drupal::entityTypeManager()->getStorage('library_transaction');
         $return_values = [
           'type' => 'library_transaction',

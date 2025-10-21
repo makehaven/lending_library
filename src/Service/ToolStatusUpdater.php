@@ -84,7 +84,7 @@ class ToolStatusUpdater {
       case self::LENDING_LIBRARY_ACTION_WITHDRAW:
         $item_details = $this->getItemDetails($library_item_node);
 
-        if ($item_details['status'] === self::LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid']) {
+        if ($item_details['status'] === self::LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && $item_details['borrower_uid'] != $transaction_borrower_uid) {
           $storage = $this->entityTypeManager->getStorage('library_transaction');
           $return_values = [
             'type' => 'library_transaction',
@@ -174,6 +174,30 @@ class ToolStatusUpdater {
           $library_item_node->set('field_item_available_since', date('Y-m-d\TH:i:s'));
         }
         $save_item_node = TRUE;
+
+        // Find and close the original withdrawal transaction.
+        $query = $this->entityTypeManager->getStorage('library_transaction')->getQuery()
+          ->condition('field_library_item', $library_item_node->id())
+          ->condition('field_library_borrower', $transaction_borrower_uid)
+          ->condition('field_library_action', 'withdraw')
+          ->condition('field_library_closed', 1, '<>')
+          ->sort('created', 'DESC')
+          ->range(0, 1)
+          ->accessCheck(FALSE);
+        $open_withdraw_ids = $query->execute();
+
+        if (!empty($open_withdraw_ids)) {
+          $open_withdraw_transaction = $this->entityTypeManager->getStorage('library_transaction')->load(reset($open_withdraw_ids));
+          if ($open_withdraw_transaction) {
+            if ($open_withdraw_transaction->hasField('field_library_closed')) {
+              $open_withdraw_transaction->set('field_library_closed', 1);
+            }
+            if ($open_withdraw_transaction->hasField(self::LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD) && $entity->hasField(self::LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)) {
+              $open_withdraw_transaction->set(self::LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD, $entity->get(self::LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)->value);
+            }
+            $open_withdraw_transaction->save();
+          }
+        }
         break;
 
       case self::LENDING_LIBRARY_ACTION_ISSUE:
