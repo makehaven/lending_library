@@ -790,8 +790,6 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
  * Drop-in replacement for lending_library_entity_insert().
  */
 function lending_library_entity_insert(EntityInterface $entity) {
-  _lending_library_update_tool_status($entity);
-
   // Only handle Library Transaction inserts.
   if ($entity->getEntityTypeId() !== 'library_transaction' || $entity->bundle() !== 'library_transaction') {
     return;
@@ -830,7 +828,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // Failsafe: If the item is being withdrawn but is still marked as
       // borrowed, it means a return was missed. We should close the previous
       // loan by creating a programmatic return transaction.
-      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid']) {
+      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && $item_details['borrower_uid'] != $transaction_borrower_uid) {
         $storage = \Drupal::entityTypeManager()->getStorage('library_transaction');
         $return_values = [
           'type' => 'library_transaction',
@@ -1074,6 +1072,7 @@ function lending_library_cron() {
     $t_query = \Drupal::entityQuery('library_transaction')
       ->condition(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, $item->id())
       ->condition(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, 'withdraw')
+      ->condition('field_library_closed', 1, '<>')
       ->sort('created', 'DESC')
       ->range(0, 1)
       ->accessCheck(FALSE);
@@ -1819,8 +1818,8 @@ function _lending_library_update_tool_status(EntityInterface $entity) {
 }
 
 /**
- * Implements hook_entity_update().
+ * Implements hook_entity_presave().
  */
-function lending_library_entity_update(EntityInterface $entity) {
+function lending_library_entity_presave(EntityInterface $entity) {
   _lending_library_update_tool_status($entity);
 }
