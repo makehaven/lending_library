@@ -17,3 +17,5 @@ dependencies:
   - drupal:field_permissions
   - drupal:comment
   - drupal:field_group
+  - drupal:charts
+  - drupal:charts_chartjs

@@ -118,3 +118,27 @@ lending_library.damage_charge_confirm:
     parameters:
       library_transaction:
         type: entity:library_transaction
+
+lending_library.stats:
+  path: '/lending-library/stats'
+  defaults:
+    _title: 'Lending Library Insights'
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::view'
+  requirements:
+    _permission: 'view lending library stats'
+
+lending_library.stats_preview:
+  path: '/lending-library/stats-preview'
+  defaults:
+    _title: 'Lending Library Insights (preview)'
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::view'
+  requirements:
+    _permission: 'access content'
+
+lending_library.stats_json:
+  path: '/lending-library/stats/data'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::json'
+    _format: 'json'
+  requirements:
+    _permission: 'view lending library stats'

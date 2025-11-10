@@ -1,0 +1,553 @@
+<?php
+
+namespace Drupal\lending_library\Service;
+
+use Drupal\Component\Datetime\TimeInterface;
+use Drupal\Core\Datetime\DateFormatterInterface;
+use Drupal\Core\Datetime\DrupalDateTime;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Entity\EntityStorageInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Field\FieldItemListInterface;
+use Drupal\node\NodeInterface;
+
+/**
+ * Builds aggregate statistics for the lending library.
+ */
+class StatsCollector implements StatsCollectorInterface {
+
+  protected const ACTION_WITHDRAW = 'withdraw';
+  protected const ITEM_NODE_TYPE = 'library_item';
+  protected const ITEM_STATUS_FIELD = 'field_library_item_status';
+  protected const ITEM_STATUS_BORROWED = 'borrowed';
+  protected const ITEM_BORROWER_FIELD = 'field_library_item_borrower';
+  protected const ITEM_REPLACEMENT_VALUE_FIELD = 'field_library_item_replacement_v';
+  protected const ITEM_CATEGORY_FIELD = 'field_library_item_category';
+  protected const ITEM_WAITLIST_FIELD = 'field_library_item_waitlist';
+  protected const TRANSACTION_ENTITY_TYPE = 'library_transaction';
+  protected const TRANSACTION_BUNDLE = 'library_transaction';
+  protected const TRANSACTION_ITEM_FIELD = 'field_library_item';
+  protected const TRANSACTION_ACTION_FIELD = 'field_library_action';
+  protected const TRANSACTION_BORROWER_FIELD = 'field_library_borrower';
+  protected const TRANSACTION_BORROW_DATE_FIELD = 'field_library_borrow_date';
+  protected const TRANSACTION_DUE_DATE_FIELD = 'field_library_due_date';
+  protected const TRANSACTION_RETURN_DATE_FIELD = 'field_library_return_date';
+  protected const TRANSACTION_CLOSED_FIELD = 'field_library_closed';
+  protected const UNCATEGORIZED_KEY = '__uncategorized';
+
+  protected EntityTypeManagerInterface $entityTypeManager;
+  protected DateFormatterInterface $dateFormatter;
+  protected TimeInterface $time;
+  protected \DateTimeZone $timezone;
+
+  /**
+   * StatsCollector constructor.
+   */
+  public function __construct(EntityTypeManagerInterface $entity_type_manager, DateFormatterInterface $date_formatter, TimeInterface $time) {
+    $this->entityTypeManager = $entity_type_manager;
+    $this->dateFormatter = $date_formatter;
+    $this->time = $time;
+    $this->timezone = new \DateTimeZone(date_default_timezone_get() ?: 'UTC');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function collect(): array {
+    $now = $this->now();
+
+    $last_month_bounds = $this->getLastMonthBounds($now);
+    $last_month_dataset = $this->loadLoanDataset($last_month_bounds['start'], $last_month_bounds['end']);
+
+    $rolling_90_bounds = $this->getRollingBounds($now, 90);
+    $rolling_90_dataset = $this->loadLoanDataset($rolling_90_bounds['start'], $rolling_90_bounds['end']);
+
+    $current = $this->buildCurrentStats();
+
+    $month_window = $this->getMonthSeriesWindow($now, 12);
+    $twelve_month_transactions = $this->loadWithdrawals($month_window['start'], $month_window['end']);
+    $monthly_series = $this->buildMonthlyLoanSeries($twelve_month_transactions, $month_window['start'], 12);
+
+    $category_distribution = $this->buildCategoryDistribution($rolling_90_dataset);
+
+    $stats = [
+      'generated' => $now->getTimestamp(),
+      'current' => $current,
+      'periods' => [
+        'last_month' => [
+          'label' => $this->dateFormatter->format($last_month_bounds['start']->getTimestamp(), 'custom', 'F Y'),
+          'start' => $last_month_bounds['start']->getTimestamp(),
+          'end' => $last_month_bounds['end']->getTimestamp(),
+          'metrics' => $this->buildLoanSummary($last_month_dataset),
+        ],
+        'rolling_90_days' => [
+          'label' => $this->dateFormatter->format($rolling_90_bounds['start']->getTimestamp(), 'custom', 'M j') . ' – ' . $this->dateFormatter->format($rolling_90_bounds['end']->modify('-1 day')->getTimestamp(), 'custom', 'M j'),
+          'start' => $rolling_90_bounds['start']->getTimestamp(),
+          'end' => $rolling_90_bounds['end']->getTimestamp(),
+          'metrics' => $this->buildLoanSummary($rolling_90_dataset),
+        ],
+      ],
+      'chart_data' => [
+        'monthly_loans' => $monthly_series,
+        'top_categories' => $category_distribution,
+      ],
+    ];
+
+    return $stats;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function buildSnapshotPayload(?array $stats = NULL): array {
+    $stats = $stats ?? $this->collect();
+    $snapshot = [
+      'generated' => $stats['generated'],
+      'active_loans' => $stats['current']['active_loans'],
+      'active_borrowers' => $stats['current']['active_borrowers'],
+      'inventory_value_on_loan' => round($stats['current']['inventory_value_on_loan'], 2),
+      'overdue_loans' => $stats['current']['overdue_loans'],
+    ];
+
+    if (!empty($stats['periods']['last_month']['metrics'])) {
+      $monthly = $stats['periods']['last_month']['metrics'];
+      $snapshot += [
+        'loans_last_month' => $monthly['loan_count'],
+        'unique_borrowers_last_month' => $monthly['unique_borrowers'],
+        'total_value_borrowed_last_month' => round($monthly['total_value'], 2),
+        'avg_loan_length_last_month' => $monthly['average_loan_length_days'],
+        'median_loan_length_last_month' => $monthly['median_loan_length_days'],
+        'repeat_borrower_rate_last_month' => $monthly['repeat_borrower_rate'],
+      ];
+    }
+
+    if (!empty($stats['periods']['rolling_90_days']['metrics'])) {
+      $rolling = $stats['periods']['rolling_90_days']['metrics'];
+      $snapshot += [
+        'loans_last_90_days' => $rolling['loan_count'],
+        'unique_borrowers_last_90_days' => $rolling['unique_borrowers'],
+        'on_time_return_rate_90_days' => $rolling['on_time_return_rate'],
+      ];
+    }
+
+    return $snapshot;
+  }
+
+  /**
+   * Builds aggregated statistics for a dataset.
+   */
+  protected function buildLoanSummary(array $dataset): array {
+    $transactions = $dataset['transactions'];
+    $items = $dataset['items'];
+
+    if (empty($transactions)) {
+      return [
+        'loan_count' => 0,
+        'unique_borrowers' => 0,
+        'unique_items' => 0,
+        'total_value' => 0.0,
+        'average_value_per_loan' => NULL,
+        'average_loans_per_borrower' => NULL,
+        'average_loan_length_days' => NULL,
+        'median_loan_length_days' => NULL,
+        'completed_loans' => 0,
+        'repeat_borrower_rate' => NULL,
+        'on_time_return_rate' => NULL,
+      ];
+    }
+
+    $loan_count = count($transactions);
+    $borrower_counts = [];
+    $item_ids = [];
+    $durations = [];
+    $total_value = 0.0;
+
+    foreach ($transactions as $transaction) {
+      $borrower_id = $this->getBorrowerId($transaction);
+      if ($borrower_id) {
+        if (!isset($borrower_counts[$borrower_id])) {
+          $borrower_counts[$borrower_id] = 0;
+        }
+        $borrower_counts[$borrower_id]++;
+      }
+
+      $item_id = NULL;
+      if ($transaction->hasField(self::TRANSACTION_ITEM_FIELD) && !$transaction->get(self::TRANSACTION_ITEM_FIELD)->isEmpty()) {
+        $item_id = (int) $transaction->get(self::TRANSACTION_ITEM_FIELD)->target_id;
+      }
+      if ($item_id) {
+        $item_ids[$item_id] = TRUE;
+        if (isset($items[$item_id]) && $items[$item_id] instanceof NodeInterface) {
+          $total_value += $this->getReplacementValue($items[$item_id]);
+        }
+      }
+
+      $borrow_date = $this->getDateFromField($transaction->get(self::TRANSACTION_BORROW_DATE_FIELD));
+      $return_date = $this->getDateFromField($transaction->get(self::TRANSACTION_RETURN_DATE_FIELD));
+      if ($borrow_date && $return_date && $return_date >= $borrow_date) {
+        $durations[] = $this->diffInDays($borrow_date, $return_date);
+      }
+    }
+
+    $unique_borrowers = count($borrower_counts);
+    $completed_loans = count($durations);
+    $repeat_borrowers = array_reduce($borrower_counts, static function ($carry, $count) {
+      return $carry + ($count > 1 ? 1 : 0);
+    }, 0);
+
+    $on_time = $this->calculateOnTimePerformance($transactions);
+
+    return [
+      'loan_count' => $loan_count,
+      'unique_borrowers' => $unique_borrowers,
+      'unique_items' => count($item_ids),
+      'total_value' => round($total_value, 2),
+      'average_value_per_loan' => $loan_count ? round($total_value / $loan_count, 2) : NULL,
+      'average_loans_per_borrower' => $unique_borrowers ? round($loan_count / $unique_borrowers, 2) : NULL,
+      'average_loan_length_days' => $completed_loans ? round(array_sum($durations) / $completed_loans, 2) : NULL,
+      'median_loan_length_days' => $this->calculateMedian($durations),
+      'completed_loans' => $completed_loans,
+      'repeat_borrower_rate' => $unique_borrowers ? round($repeat_borrowers / $unique_borrowers, 3) : NULL,
+      'on_time_return_rate' => $on_time['rate'],
+    ];
+  }
+
+  /**
+   * Retrieves the borrower ID from a transaction entity.
+   */
+  protected function getBorrowerId(EntityInterface $transaction): ?int {
+    if ($transaction->hasField(self::TRANSACTION_BORROWER_FIELD) && !$transaction->get(self::TRANSACTION_BORROWER_FIELD)->isEmpty()) {
+      $target = $transaction->get(self::TRANSACTION_BORROWER_FIELD)->target_id;
+      return $target ? (int) $target : NULL;
+    }
+
+    $owner_id = $transaction->getOwnerId();
+    return $owner_id ? (int) $owner_id : NULL;
+  }
+
+  /**
+   * Calculates on-time return rate for a batch of transactions.
+   */
+  protected function calculateOnTimePerformance(array $transactions): array {
+    $completed = 0;
+    $on_time = 0;
+
+    foreach ($transactions as $transaction) {
+      $return_date = $this->getDateFromField($transaction->get(self::TRANSACTION_RETURN_DATE_FIELD));
+      $due_date = $this->getDateFromField($transaction->get(self::TRANSACTION_DUE_DATE_FIELD));
+      if ($return_date && $due_date) {
+        $completed++;
+        if ($return_date <= $due_date) {
+          $on_time++;
+        }
+      }
+    }
+
+    return [
+      'completed' => $completed,
+      'on_time' => $on_time,
+      'rate' => $completed ? round($on_time / $completed, 3) : NULL,
+    ];
+  }
+
+  /**
+   * Builds the current operational snapshot.
+   */
+  protected function buildCurrentStats(): array {
+    $node_storage = $this->entityTypeManager->getStorage('node');
+    $query = $node_storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->condition(self::ITEM_STATUS_FIELD, self::ITEM_STATUS_BORROWED);
+
+    $ids = $query->execute();
+    $nodes = $ids ? $node_storage->loadMultiple($ids) : [];
+
+    $borrowers = [];
+    $value_on_loan = 0.0;
+
+    foreach ($nodes as $node) {
+      if ($node instanceof NodeInterface) {
+        $value_on_loan += $this->getReplacementValue($node);
+        if ($node->hasField(self::ITEM_BORROWER_FIELD) && !$node->get(self::ITEM_BORROWER_FIELD)->isEmpty()) {
+          $borrowers[$node->get(self::ITEM_BORROWER_FIELD)->target_id] = TRUE;
+        }
+      }
+    }
+
+    return [
+      'active_loans' => count($nodes),
+      'active_borrowers' => count($borrowers),
+      'inventory_value_on_loan' => round($value_on_loan, 2),
+      'overdue_loans' => $this->countOverdueLoans(),
+    ];
+  }
+
+  /**
+   * Counts open loans with due dates in the past.
+   */
+  protected function countOverdueLoans(): int {
+    $storage = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE);
+    $query = $storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::TRANSACTION_BUNDLE)
+      ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
+      ->condition(self::TRANSACTION_CLOSED_FIELD, 1, '<>');
+
+    $today = $this->now()->format('Y-m-d');
+    $query->condition(self::TRANSACTION_DUE_DATE_FIELD . '.value', $today, '<');
+
+    return (int) $query->count()->execute();
+  }
+
+  /**
+   * Builds a dataset containing transactions and the referenced items.
+   */
+  protected function loadLoanDataset(\DateTimeImmutable $start, \DateTimeImmutable $end): array {
+    $transactions = $this->loadWithdrawals($start, $end);
+    $item_ids = [];
+    foreach ($transactions as $transaction) {
+      if ($transaction->hasField(self::TRANSACTION_ITEM_FIELD) && !$transaction->get(self::TRANSACTION_ITEM_FIELD)->isEmpty()) {
+        $item_id = (int) $transaction->get(self::TRANSACTION_ITEM_FIELD)->target_id;
+        if ($item_id) {
+          $item_ids[$item_id] = TRUE;
+        }
+      }
+    }
+
+    $items = [];
+    if (!empty($item_ids)) {
+      $items = $this->entityTypeManager->getStorage('node')->loadMultiple(array_keys($item_ids));
+    }
+
+    return [
+      'transactions' => $transactions,
+      'items' => $items,
+    ];
+  }
+
+  /**
+   * Loads withdraw transactions in the provided window.
+   */
+  protected function loadWithdrawals(\DateTimeImmutable $start, \DateTimeImmutable $end): array {
+    $storage = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE);
+    $query = $storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::TRANSACTION_BUNDLE)
+      ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
+      ->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $start->format('Y-m-d'), '>=')
+      ->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $end->format('Y-m-d'), '<')
+      ->sort(self::TRANSACTION_BORROW_DATE_FIELD . '.value', 'ASC');
+
+    $ids = $query->execute();
+    return $ids ? $storage->loadMultiple($ids) : [];
+  }
+
+  /**
+   * Builds the month → loan count series.
+   */
+  protected function buildMonthlyLoanSeries(array $transactions, \DateTimeImmutable $start, int $months): array {
+    $series = [];
+    for ($i = 0; $i < $months; $i++) {
+      $month_start = $start->modify("+$i months");
+      $series[$month_start->format('Y-m')] = [
+        'key' => $month_start->format('Y-m'),
+        'label' => $this->dateFormatter->format($month_start->getTimestamp(), 'custom', 'M Y'),
+        'value' => 0,
+      ];
+    }
+    $end = $start->modify("+$months months");
+
+    foreach ($transactions as $transaction) {
+      $borrow_date = $this->getDateFromField($transaction->get(self::TRANSACTION_BORROW_DATE_FIELD));
+      if (!$borrow_date || $borrow_date < $start || $borrow_date >= $end) {
+        continue;
+      }
+      $key = $borrow_date->format('Y-m');
+      if (isset($series[$key])) {
+        $series[$key]['value']++;
+      }
+    }
+
+    return array_values($series);
+  }
+
+  /**
+   * Builds the top category distribution for the provided dataset.
+   */
+  protected function buildCategoryDistribution(array $dataset, int $limit = 6): array {
+    $transactions = $dataset['transactions'];
+    $items = $dataset['items'];
+    if (empty($transactions) || empty($items)) {
+      return [];
+    }
+
+    $counts = [];
+    foreach ($transactions as $transaction) {
+      $item_id = NULL;
+      if ($transaction->hasField(self::TRANSACTION_ITEM_FIELD) && !$transaction->get(self::TRANSACTION_ITEM_FIELD)->isEmpty()) {
+        $item_id = (int) $transaction->get(self::TRANSACTION_ITEM_FIELD)->target_id;
+      }
+
+      if (!$item_id || empty($items[$item_id]) || !$items[$item_id]->hasField(self::ITEM_CATEGORY_FIELD)) {
+        $counts[self::UNCATEGORIZED_KEY] = ($counts[self::UNCATEGORIZED_KEY] ?? 0) + 1;
+        continue;
+      }
+
+      $field = $items[$item_id]->get(self::ITEM_CATEGORY_FIELD);
+      if ($field->isEmpty()) {
+        $counts[self::UNCATEGORIZED_KEY] = ($counts[self::UNCATEGORIZED_KEY] ?? 0) + 1;
+        continue;
+      }
+
+      foreach ($field as $item) {
+        $tid = (int) $item->target_id;
+        if ($tid) {
+          $counts[$tid] = ($counts[$tid] ?? 0) + 1;
+        }
+      }
+    }
+
+    $total = array_sum($counts);
+    if ($total === 0) {
+      return [];
+    }
+
+    arsort($counts);
+
+    $term_ids = array_filter(array_keys($counts), static function ($key) {
+      return is_int($key);
+    });
+    $terms = $term_ids ? $this->entityTypeManager->getStorage('taxonomy_term')->loadMultiple($term_ids) : [];
+
+    $output = [];
+    foreach ($counts as $key => $count) {
+      $label = 'Uncategorized';
+      if ($key !== self::UNCATEGORIZED_KEY) {
+        $label = isset($terms[$key]) ? $terms[$key]->label() : 'Unknown';
+      }
+      $output[] = [
+        'label' => $label,
+        'value' => $count,
+        'share' => round($count / $total, 3),
+      ];
+      if (count($output) >= $limit) {
+        break;
+      }
+    }
+
+    return $output;
+  }
+
+  /**
+   * Calculates the median for an array of numbers.
+   */
+  protected function calculateMedian(array $values): ?float {
+    if (empty($values)) {
+      return NULL;
+    }
+    sort($values, SORT_NUMERIC);
+    $count = count($values);
+    $middle = (int) floor($count / 2);
+    if ($count % 2) {
+      return round($values[$middle], 2);
+    }
+    return round(($values[$middle - 1] + $values[$middle]) / 2, 2);
+  }
+
+  /**
+   * Converts a field value into a PHP immutable date.
+   */
+  protected function getDateFromField(?FieldItemListInterface $field): ?\DateTimeImmutable {
+    if (!$field || $field->isEmpty()) {
+      return NULL;
+    }
+    $item = $field->first();
+    if (!$item) {
+      return NULL;
+    }
+
+    if (isset($item->date) && $item->date instanceof DrupalDateTime) {
+      $php_date = $item->date->getPhpDateTime();
+      if ($php_date instanceof \DateTimeInterface) {
+        return \DateTimeImmutable::createFromMutable($php_date)->setTimezone($this->timezone);
+      }
+    }
+
+    $value = $item->value ?? NULL;
+    if (!$value) {
+      return NULL;
+    }
+
+    try {
+      return new \DateTimeImmutable($value, $this->timezone);
+    }
+    catch (\Exception $e) {
+      return NULL;
+    }
+  }
+
+  /**
+   * Calculates the difference between two dates in days (with decimals).
+   */
+  protected function diffInDays(\DateTimeImmutable $start, \DateTimeImmutable $end): float {
+    $seconds = $end->getTimestamp() - $start->getTimestamp();
+    return round($seconds / 86400, 2);
+  }
+
+  /**
+   * Gets the replacement value for an item node.
+   */
+  protected function getReplacementValue(NodeInterface $node): float {
+    if ($node->hasField(self::ITEM_REPLACEMENT_VALUE_FIELD) && !$node->get(self::ITEM_REPLACEMENT_VALUE_FIELD)->isEmpty()) {
+      $raw = $node->get(self::ITEM_REPLACEMENT_VALUE_FIELD)->value;
+      return is_numeric($raw) ? (float) $raw : 0.0;
+    }
+    return 0.0;
+  }
+
+  /**
+   * Returns the DateTimeImmutable for "now".
+   */
+  protected function now(): \DateTimeImmutable {
+    return (new \DateTimeImmutable('@' . $this->time->getRequestTime()))->setTimezone($this->timezone);
+  }
+
+  /**
+   * Returns the bounds for the previous full calendar month.
+   */
+  protected function getLastMonthBounds(\DateTimeImmutable $now): array {
+    $first_day_this_month = $now->modify('first day of this month')->setTime(0, 0, 0);
+    $start = $first_day_this_month->modify('-1 month');
+    $end = $first_day_this_month;
+    return [
+      'start' => $start,
+      'end' => $end,
+    ];
+  }
+
+  /**
+   * Returns the rolling window bounds in days (end exclusive).
+   */
+  protected function getRollingBounds(\DateTimeImmutable $now, int $days): array {
+    $end = $now->setTime(0, 0, 0)->modify('+1 day');
+    $start = $end->modify("-$days days");
+    return [
+      'start' => $start,
+      'end' => $end,
+    ];
+  }
+
+  /**
+   * Returns the window for a month-based series.
+   */
+  protected function getMonthSeriesWindow(\DateTimeImmutable $now, int $months): array {
+    $start = $now->modify('first day of this month')->setTime(0, 0, 0)->modify('-' . ($months - 1) . ' months');
+    $end = $start->modify("+$months months");
+    return [
+      'start' => $start,
+      'end' => $end,
+    ];
+  }
+
+}

@@ -1,0 +1,299 @@
+{#
+/**
+ * @file
+ * Theme template for the Lending Library statistics dashboard.
+ */
+#}
+
+{% set last_month = stats.periods.last_month ?? {} %}
+{% set rolling = stats.periods.rolling_90_days ?? {} %}
+{% set last_month_start = last_month.start ?? null %}
+{% set last_month_end = last_month.end ?? null %}
+
+<div class="container my-4 lending-library-stats">
+  <header class="p-4 p-lg-5 bg-light border rounded mb-4">
+    <div class="row gy-3 align-items-center">
+      <div class="col-lg-8">
+        <p class="text-uppercase text-muted small mb-1">{{ 'Lending library'|t }}</p>
+        <h1 class="h3 mb-2">{{ 'Usage insights'|t }}</h1>
+        <p class="text-secondary mb-0">
+          {{ 'Track tool circulation, borrowing patterns, and equipment demand with the same dataset used by the makerspace dashboard.'|t }}
+        </p>
+      </div>
+      <div class="col-lg-4">
+        <dl class="row mb-0 small">
+          <dt class="col-5 text-uppercase text-muted">{{ 'Last updated'|t }}</dt>
+          <dd class="col-7 fw-semibold mb-2">{{ stats.generated|date('M j, Y g:ia T') }}</dd>
+          <dt class="col-5 text-uppercase text-muted">{{ 'Coverage'|t }}</dt>
+          <dd class="col-7 fw-semibold mb-0">
+            {{ last_month.label|default('Last month'|t) }}
+            <span class="text-muted">·</span>
+            {{ 'rolling 90 days'|t }}
+          </dd>
+        </dl>
+      </div>
+    </div>
+  </header>
+
+  <section class="mb-5" aria-labelledby="snapshot-heading">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+      <div>
+        <p class="text-uppercase text-muted small mb-1">{{ 'Live snapshot'|t }}</p>
+        <h2 id="snapshot-heading" class="h4 mb-0">{{ 'Right now in the tool library'|t }}</h2>
+      </div>
+      <p class="text-muted small mb-0">
+        {{ 'Refreshes every few minutes so staff can triage overdue returns and high-value loans before members arrive.'|t }}
+      </p>
+    </div>
+    {% set summary_cards = [
+      {
+        label: 'Active loans'|t,
+        value: stats.current.active_loans|default(0),
+        help: 'Tools currently checked out.'|t
+      },
+      {
+        label: 'Value on loan'|t,
+        value: '$' ~ stats.current.inventory_value_on_loan|number_format(2, '.', ','),
+        help: 'Replacement value in members’ hands.'|t
+      },
+      {
+        label: 'Overdue withdrawals'|t,
+        value: stats.current.overdue_loans|default(0),
+        help: 'Loans past their promised return date.'|t
+      },
+      {
+        label: 'Active borrowers'|t,
+        value: stats.current.active_borrowers|default(0),
+        help: 'Members with at least one open loan.'|t
+      }
+    ] %}
+    <div class="row g-3">
+      {% for card in summary_cards %}
+        <div class="col-12 col-sm-6 col-lg-3">
+          <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ card.label }}</p>
+              <div class="display-6 fw-semibold">{{ card.value }}</div>
+              <p class="text-muted small mb-0">{{ card.help }}</p>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="mb-5" aria-labelledby="periods-heading">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+      <div>
+        <p class="text-uppercase text-muted small mb-1">{{ 'Period over period'|t }}</p>
+        <h2 id="periods-heading" class="h4 mb-0">{{ 'Last month vs. rolling 90 days'|t }}</h2>
+      </div>
+      <p class="text-muted small mb-0">
+        {{ 'Last month covers the previous full calendar month'|t }}
+        {% if last_month_start and last_month_end %}
+          ({{ last_month_start|date('M j') }} – {{ (last_month_end - 86400)|date('M j') }}).
+        {% else %}
+          {{ 'Data will populate once more transactions are recorded.'|t }}
+        {% endif %}
+      </p>
+    </div>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <p class="text-uppercase text-muted small mb-1">{{ 'Last month'|t }}</p>
+            <h3 class="h5">{{ last_month.label|default('Not enough data'|t) }}</h3>
+            <dl class="row small mb-0 mt-3">
+              <dt class="col-5 text-uppercase text-muted">{{ 'Loans'|t }}</dt>
+              <dd class="col-7 mb-3">
+                <span class="fw-semibold">{{ last_month.metrics.loan_count|default(0) }}</span>
+                <span class="text-muted">· {{ '@count unique tools'|t({'@count': last_month.metrics.unique_items|default(0)}) }}</span>
+              </dd>
+              <dt class="col-5 text-uppercase text-muted">{{ 'Borrowers'|t }}</dt>
+              <dd class="col-7 mb-3">
+                <span class="fw-semibold">{{ last_month.metrics.unique_borrowers|default(0) }}</span>
+                <span class="text-muted">
+                  {% if last_month.metrics.repeat_borrower_rate is not empty %}
+                    {{ '@rate% repeaters'|t({'@rate': (last_month.metrics.repeat_borrower_rate * 100)|number_format(1)}) }}
+                  {% else %}
+                    {{ 'Tracking return visitors'|t }}
+                  {% endif %}
+                </span>
+              </dd>
+              <dt class="col-5 text-uppercase text-muted">{{ 'Value borrowed'|t }}</dt>
+              <dd class="col-7 mb-3">
+                <span class="fw-semibold">${{ last_month.metrics.total_value|default(0)|number_format(2, '.', ',') }}</span>
+                <span class="text-muted">
+                  {% if last_month.metrics.average_value_per_loan is not empty %}
+                    {{ '$@avg / loan'|t({'@avg': last_month.metrics.average_value_per_loan|number_format(2)}) }}
+                  {% else %}
+                    {{ 'Replacement value per checkout'|t }}
+                  {% endif %}
+                </span>
+              </dd>
+              <dt class="col-5 text-uppercase text-muted">{{ 'Loan length'|t }}</dt>
+              <dd class="col-7">
+                {% if last_month.metrics.average_loan_length_days is not empty %}
+                  <span class="fw-semibold">{{ last_month.metrics.average_loan_length_days|number_format(1) }} {{ 'days'|t }}</span>
+                {% else %}
+                  <span class="fw-semibold">—</span>
+                {% endif %}
+                <span class="text-muted d-block">
+                  {% if last_month.metrics.median_loan_length_days is not empty %}
+                    {{ 'Median @days days'|t({'@days': last_month.metrics.median_loan_length_days|number_format(1)}) }}
+                  {% else %}
+                    {{ 'Waiting for completed returns'|t }}
+                  {% endif %}
+                </span>
+              </dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <p class="text-uppercase text-muted small mb-1">{{ 'Rolling 90 days'|t }}</p>
+            <h3 class="h5">{{ rolling.label|default('Not enough data'|t) }}</h3>
+            <dl class="row small mb-0 mt-3">
+              <dt class="col-5 text-uppercase text-muted">{{ 'Loans'|t }}</dt>
+              <dd class="col-7 mb-3">
+                <span class="fw-semibold">{{ rolling.metrics.loan_count|default(0) }}</span>
+                <span class="text-muted">
+                  {% if rolling.metrics.average_loans_per_borrower is not empty %}
+                    · {{ '@count per borrower'|t({'@count': rolling.metrics.average_loans_per_borrower|number_format(2)}) }}
+                  {% else %}
+                    · {{ 'Borrowing frequency'|t }}
+                  {% endif %}
+                </span>
+              </dd>
+              <dt class="col-5 text-uppercase text-muted">{{ 'Borrowers'|t }}</dt>
+              <dd class="col-7 mb-3">
+                <span class="fw-semibold">{{ rolling.metrics.unique_borrowers|default(0) }}</span>
+                <span class="text-muted">· {{ '@count completed loans'|t({'@count': rolling.metrics.completed_loans|default(0)}) }}</span>
+              </dd>
+              <dt class="col-5 text-uppercase text-muted">{{ 'On-time returns'|t }}</dt>
+              <dd class="col-7 mb-3">
+                {% if rolling.metrics.on_time_return_rate is not empty %}
+                  <span class="fw-semibold">{{ (rolling.metrics.on_time_return_rate * 100)|number_format(1) }}%</span>
+                {% else %}
+                  <span class="fw-semibold">—</span>
+                {% endif %}
+                <span class="text-muted d-block">{{ 'Based on check-ins with due dates.'|t }}</span>
+              </dd>
+              <dt class="col-5 text-uppercase text-muted">{{ 'Loan duration'|t }}</dt>
+              <dd class="col-7">
+                {% if rolling.metrics.average_loan_length_days is not empty %}
+                  <span class="fw-semibold">{{ rolling.metrics.average_loan_length_days|number_format(1) }} {{ 'days'|t }}</span>
+                {% else %}
+                  <span class="fw-semibold">—</span>
+                {% endif %}
+                <span class="text-muted d-block">
+                  {% if rolling.metrics.median_loan_length_days is not empty %}
+                    {{ 'Median @days days'|t({'@days': rolling.metrics.median_loan_length_days|number_format(1)}) }}
+                  {% else %}
+                    {{ 'Waiting for return data'|t }}
+                  {% endif %}
+                </span>
+              </dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mb-5" aria-labelledby="charts-heading">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+      <div>
+        <p class="text-uppercase text-muted small mb-1">{{ 'Demand signals'|t }}</p>
+        <h2 class="h4 mb-0" id="charts-heading">{{ 'What people are borrowing'|t }}</h2>
+      </div>
+      <p class="text-muted small mb-0">{{ 'Charts render via the Drupal Charts module; tables remain for quick exports and screen readers.'|t }}</p>
+    </div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h3 class="h5">{{ 'Monthly loan volume (last 12 months)'|t }}</h3>
+            {% if charts.monthly %}
+              <div class="mb-3">
+                {{ charts.monthly }}
+              </div>
+            {% else %}
+              <p class="text-muted">{{ 'No lending activity recorded within the last year.'|t }}</p>
+            {% endif %}
+            {% if stats.chart_data.monthly_loans is not empty %}
+              <table class="table table-sm table-striped align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th scope="col">{{ 'Month'|t }}</th>
+                    <th scope="col" class="text-end">{{ 'Loans'|t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for point in stats.chart_data.monthly_loans %}
+                    <tr>
+                      <th scope="row">{{ point.label }}</th>
+                      <td class="text-end">{{ point.value }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h3 class="h5">{{ 'Most borrowed categories (last 90 days)'|t }}</h3>
+            {% if charts.categories %}
+              <div class="mb-3">
+                {{ charts.categories }}
+              </div>
+            {% else %}
+              <p class="text-muted">{{ 'No categorized loans logged during the last 90 days.'|t }}</p>
+            {% endif %}
+            {% if stats.chart_data.top_categories is not empty %}
+              <table class="table table-sm table-striped align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th scope="col">{{ 'Category'|t }}</th>
+                    <th scope="col" class="text-end">{{ 'Loans'|t }}</th>
+                    <th scope="col" class="text-end">{{ 'Share'|t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for category in stats.chart_data.top_categories %}
+                    <tr>
+                      <th scope="row">{{ category.label }}</th>
+                      <td class="text-end">{{ category.value }}</td>
+                      <td class="text-end">{{ (category.share * 100)|number_format(1) }}%</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="feeds-heading" class="mb-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+      <div>
+        <p class="text-uppercase text-muted small mb-1">{{ 'Data feeds'|t }}</p>
+        <h2 id="feeds-heading" class="h4 mb-0">{{ 'Reuse these insights elsewhere'|t }}</h2>
+      </div>
+    </div>
+    <p>{{ 'The makerspace_snapshots module or external dashboards can ingest the same data in two ways:'|t }}</p>
+    <ul>
+      <li>{{ 'Inject the <code>lending_library.stats_collector</code> service and call <code>::collect()</code> or <code>::buildSnapshotPayload()</code>.'|t|raw }}</li>
+      <li>{{ 'Request the JSON feed at <code>@url</code> (requires the original permission).'
+        |t({'@url': path('lending_library.stats_json')})|raw }}</li>
+    </ul>
+    <p>{{ 'The JSON response contains <code>current</code>, <code>periods</code>, <code>chart_data</code>, and a <code>snapshot</code> array that mirrors <code>drupalSettings.lendingLibraryStats</code>.'|t|raw }}</p>
+  </section>
+</div>

@@ -27,3 +27,7 @@ administer lending library payment configuration:
 'get in line for library items':
   title: 'Get in line for library items'
   description: 'Allows users to add themselves to the waitlist for a library item.'
+
+view lending library stats:
+  title: 'View Lending Library analytics'
+  description: 'Allows users to view the Lending Library statistics dashboard and JSON feed.'

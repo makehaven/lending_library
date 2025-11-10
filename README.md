@@ -46,6 +46,27 @@ This Drupal custom module powers the MakeHaven Lending Library. It manages tool 
   - `email_issue_notice_intro` – intro text for issue report emails  
   - Defaults load on first install and can be edited at `/admin/config/makehaven/lending-library`
 
+## Analytics & Dashboards
+
+- **Lending Library Insights page** – Visit `/lending-library/stats` (permission: `view lending library stats`) to see:
+  - Live snapshot: active loans, borrowers, inventory value on loan, overdue count.
+  - Last-month overview: number of loans, unique borrowers, total value borrowed, average and median loan length, repeat-borrower rate.
+  - Rolling 90-day health metrics: borrowing velocity, completion counts, on-time return rate, and loan duration trends.
+  - Supporting data sets: top categories (last 90 days) and a 12-month loan volume table.
+- **JSON + drupalSettings feeds** – The same data is machine-readable for dashboards:
+  - JSON endpoint: `/lending-library/stats/data` (same permission as the page). Returns `current`, `periods`, `chart_data`, and a flattened `snapshot` payload that makerspace_snapshots can store.
+  - `drupalSettings.lendingLibraryStats` contains `snapshot` + `chartData` for Chart.js consumption inside `makerspace_dashboard`.
+- **Stats Collector service** – Inject `lending_library.stats_collector` anywhere (for example, in `makerspace_snapshots`) to capture data without HTTP:
+
+  ```php
+  /** @var \Drupal\lending_library\Service\StatsCollectorInterface $stats */
+  $stats = \Drupal::service('lending_library.stats_collector');
+  $full = $stats->collect();              // Nested array for pages or APIs.
+  $snapshot = $stats->buildSnapshotPayload($full); // Flattened values ideal for storage.
+  ```
+
+  The snapshot includes the primary KPIs (`active_loans`, `total_value_borrowed_last_month`, `on_time_return_rate_90_days`, etc.) so makerspace_snapshots can archive them on a schedule and makerspace_dashboard can plot long-term trends with Chart.js.
+
 ## Requirements
 
 - Drupal 9 or 10  

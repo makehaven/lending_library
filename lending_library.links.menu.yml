@@ -4,3 +4,9 @@ lending_library.settings:
   route_name: lending_library.settings
   parent: system.admin_config_services
   weight: 100
+
+lending_library.stats:
+  title: 'Lending Library Insights'
+  description: 'View current utilization metrics and historical trends.'
+  route_name: lending_library.stats
+  parent: system.admin_reports

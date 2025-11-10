@@ -1823,3 +1823,20 @@ function _lending_library_update_tool_status(EntityInterface $entity) {
 function lending_library_entity_presave(EntityInterface $entity) {
   _lending_library_update_tool_status($entity);
 }
+
+/**
+ * Implements hook_theme().
+ */
+function lending_library_theme($existing, $type, $theme, $path) {
+  $module_path = \Drupal::service('extension.list.module')->getPath('lending_library');
+  return [
+    'lending_library_stats' => [
+      'variables' => [
+        'stats' => [],
+        'charts' => [],
+      ],
+      'template' => 'lending-library-stats',
+      'path' => $module_path . '/templates',
+    ],
+  ];
+}

@@ -2,3 +2,10 @@ services:
   lending_library.tool_status_updater:
     class: Drupal\lending_library\Service\ToolStatusUpdater
     arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time']
+
+  lending_library.stats_collector:
+    class: Drupal\lending_library\Service\StatsCollector
+    arguments:
+      - '@entity_type.manager'
+      - '@date.formatter'
+      - '@datetime.time'
