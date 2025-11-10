@@ -48,15 +48,15 @@ This Drupal custom module powers the MakeHaven Lending Library. It manages tool 
 
 ## Analytics & Dashboards
 
-- **Lending Library Insights page** – Visit `/lending-library/stats` (permission: `view lending library stats`) to see:
+- **Lending Library Insights page** – Visit `/lending-library/stats` (alias `/library/stats`; permission: `view lending library stats`) to see:
   - Live snapshot: active loans, borrowers, inventory value on loan, overdue count.
   - Last-month overview: number of loans, unique borrowers, total value borrowed, average and median loan length, repeat-borrower rate.
   - Rolling 90-day health metrics: borrowing velocity, completion counts, on-time return rate, and loan duration trends.
   - Supporting data sets: top categories (last 90 days) and a 12-month loan volume table.
 - **JSON + drupalSettings feeds** – The same data is machine-readable for dashboards:
-  - JSON endpoint: `/lending-library/stats/data` (same permission as the page). Returns `current`, `periods`, `chart_data`, and a flattened `snapshot` payload that makerspace_snapshots can store.
+  - JSON endpoint: `/library/stats/data` (same permission as the page). Returns `current`, `periods`, `chart_data`, `retention_insights`, `batteries`, `inventory_totals`, and a flattened `snapshot` payload that makerspace_snapshots can store.
   - `drupalSettings.lendingLibraryStats` contains `snapshot` + `chartData` for Chart.js consumption inside `makerspace_dashboard`.
-- **Stats Collector service** – Inject `lending_library.stats_collector` anywhere (for example, in `makerspace_snapshots`) to capture data without HTTP:
+- **Stats Collector service** – Inject `lending_library.stats_collector` anywhere (for example, in `makerspace_snapshots`) to capture data without HTTP. This is ideal when scripting AI agents so they can reuse the same contract:
 
   ```php
   /** @var \Drupal\lending_library\Service\StatsCollectorInterface $stats */
@@ -66,6 +66,12 @@ This Drupal custom module powers the MakeHaven Lending Library. It manages tool 
   ```
 
   The snapshot includes the primary KPIs (`active_loans`, `total_value_borrowed_last_month`, `on_time_return_rate_90_days`, etc.) so makerspace_snapshots can archive them on a schedule and makerspace_dashboard can plot long-term trends with Chart.js.
+
+- **Data feed quick reference (for AI + dashboards)**:
+  - Routes: `/library/stats` (primary), `/library/stats-preview` (loosely gated QA).
+  - API: `/library/stats/data` (JSON, same permission as the main page).
+  - Service: `lending_library.stats_collector` providing `collect()` and `buildSnapshotPayload()`.
+  - Key arrays: `current`, `inventory_totals`, `periods`, `chart_data`, `batteries`, `retention_insights`, `retention_cohorts`, and `snapshot`. Always check for empty arrays when rendering.
 
 ## Requirements
 

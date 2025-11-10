@@ -127,6 +127,14 @@ lending_library.stats:
   requirements:
     _permission: 'view lending library stats'
 
+lending_library.stats_alias:
+  path: '/library/stats'
+  defaults:
+    _title: 'Lending Library Insights'
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::redirectToStats'
+  requirements:
+    _permission: 'view lending library stats'
+
 lending_library.stats_preview:
   path: '/lending-library/stats-preview'
   defaults:
@@ -135,10 +143,26 @@ lending_library.stats_preview:
   requirements:
     _permission: 'access content'
 
+lending_library.stats_preview_alias:
+  path: '/library/stats-preview'
+  defaults:
+    _title: 'Lending Library Insights (preview)'
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::redirectToPreview'
+  requirements:
+    _permission: 'access content'
+
 lending_library.stats_json:
   path: '/lending-library/stats/data'
   defaults:
     _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::json'
+    _format: 'json'
+  requirements:
+    _permission: 'view lending library stats'
+
+lending_library.stats_json_alias:
+  path: '/library/stats/data'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryStatsController::redirectToStatsJson'
     _format: 'json'
   requirements:
     _permission: 'view lending library stats'

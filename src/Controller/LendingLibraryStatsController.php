@@ -6,6 +6,8 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\lending_library\Service\StatsCollectorInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Drupal\Core\Url;
 
 /**
  * Controller for the Lending Library statistics dashboard.
@@ -73,6 +75,27 @@ class LendingLibraryStatsController extends ControllerBase {
       'chart_data' => $stats['chart_data'],
       'snapshot' => $snapshot,
     ]);
+  }
+
+  /**
+   * Redirects alias routes to the canonical stats page.
+   */
+  public function redirectToStats(): RedirectResponse {
+    return new RedirectResponse(Url::fromRoute('lending_library.stats')->toString(), 301);
+  }
+
+  /**
+   * Redirects alias preview routes to the canonical preview page.
+   */
+  public function redirectToPreview(): RedirectResponse {
+    return new RedirectResponse(Url::fromRoute('lending_library.stats_preview')->toString(), 301);
+  }
+
+  /**
+   * Redirects alias JSON routes to the canonical JSON endpoint.
+   */
+  public function redirectToStatsJson(): RedirectResponse {
+    return new RedirectResponse(Url::fromRoute('lending_library.stats_json')->toString(), 301);
   }
 
   /**

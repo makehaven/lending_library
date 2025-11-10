@@ -45,23 +45,28 @@
         {{ 'Refreshes every few minutes so staff can triage overdue returns and high-value loans before members arrive.'|t }}
       </p>
     </div>
+    {% set overdue_borrowers = stats.current.borrowers_with_overdue|default(0) %}
     {% set summary_cards = [
       {
+        key: 'active_loans',
         label: 'Active loans'|t,
         value: stats.current.active_loans|default(0),
         help: 'Tools currently checked out.'|t
       },
       {
+        key: 'value_on_loan',
         label: 'Value on loan'|t,
         value: '$' ~ stats.current.inventory_value_on_loan|number_format(2, '.', ','),
         help: 'Replacement value in members’ hands.'|t
       },
       {
+        key: 'overdue_loans',
         label: 'Overdue withdrawals'|t,
         value: stats.current.overdue_loans|default(0),
         help: 'Loans past their promised return date.'|t
       },
       {
+        key: 'active_borrowers',
         label: 'Active borrowers'|t,
         value: stats.current.active_borrowers|default(0),
         help: 'Members with at least one open loan.'|t
@@ -74,11 +79,31 @@
             <div class="card-body">
               <p class="text-uppercase text-muted small mb-1">{{ card.label }}</p>
               <div class="display-6 fw-semibold">{{ card.value }}</div>
-              <p class="text-muted small mb-0">{{ card.help }}</p>
+              <p class="text-muted small mb-0">
+                {{ card.help }}
+                {% if card.key == 'active_borrowers' and overdue_borrowers %}
+                  <br>
+                  <span class="text-danger">
+                    {{ '@count borrower(s) currently have overdue loans.'|t({'@count': overdue_borrowers}) }}
+                  </span>
+                {% endif %}
+              </p>
             </div>
           </div>
         </div>
       {% endfor %}
+      {% set inventory = stats.inventory_totals|default({'count': 0, 'value': 0}) %}
+      <div class="col-12 col-sm-6 col-lg-3">
+        <div class="card shadow-sm h-100 border-0">
+          <div class="card-body">
+            <p class="text-uppercase text-muted small mb-1">{{ 'Library footprint'|t }}</p>
+            <div class="display-6 fw-semibold">{{ inventory.count }}</div>
+            <p class="text-muted small mb-0">
+              {{ 'Cataloged tools worth @value'|t({'@value': '$' ~ inventory.value|number_format(2, '.', ',')}) }}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -223,8 +248,9 @@
             {% else %}
               <p class="text-muted">{{ 'No lending activity recorded within the last year.'|t }}</p>
             {% endif %}
-            {% if stats.chart_data.monthly_loans is not empty %}
-              <table class="table table-sm table-striped align-middle mb-0">
+            {% set monthly_points = stats.chart_data.monthly_loans|default([]) %}
+            {% if monthly_points %}
+              <table class="table table-sm align-middle mb-0">
                 <thead>
                   <tr>
                     <th scope="col">{{ 'Month'|t }}</th>
@@ -232,7 +258,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for point in stats.chart_data.monthly_loans %}
+                  {% for point in monthly_points %}
                     <tr>
                       <th scope="row">{{ point.label }}</th>
                       <td class="text-end">{{ point.value }}</td>
@@ -255,8 +281,9 @@
             {% else %}
               <p class="text-muted">{{ 'No categorized loans logged during the last 90 days.'|t }}</p>
             {% endif %}
-            {% if stats.chart_data.top_categories is not empty %}
-              <table class="table table-sm table-striped align-middle mb-0">
+            {% set categories = stats.chart_data.top_categories|default([]) %}
+            {% if categories %}
+              <table class="table table-sm align-middle mb-0">
                 <thead>
                   <tr>
                     <th scope="col">{{ 'Category'|t }}</th>
@@ -265,7 +292,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for category in stats.chart_data.top_categories %}
+                  {% for category in categories %}
                     <tr>
                       <th scope="row">{{ category.label }}</th>
                       <td class="text-end">{{ category.value }}</td>
@@ -274,6 +301,7 @@
                   {% endfor %}
                 </tbody>
               </table>
+              <p class="text-muted small mt-2">{{ 'Tools can belong to multiple categories, so percentages may exceed 100%.'|t }}</p>
             {% endif %}
           </div>
         </div>
@@ -281,19 +309,202 @@
     </div>
   </section>
 
-  <section aria-labelledby="feeds-heading" class="mb-5">
-    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+  {% if stats.batteries is not empty %}
+    {% set batteries = stats.batteries %}
+    <section class="mb-5" aria-labelledby="battery-heading">
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+          <p class="text-uppercase text-muted small mb-1">{{ 'Battery pool'|t }}</p>
+          <h2 id="battery-heading" class="h4 mb-0">{{ 'Charging pack utilization'|t }}</h2>
+        </div>
+        <p class="text-muted small mb-0">
+          {{ '@borrowed of @total packs checked out (@ratio%)'|t({
+            '@borrowed': batteries.borrowed,
+            '@total': batteries.total,
+            '@ratio': batteries.borrowed_ratio|number_format(1)
+          }) }}
+        </p>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card shadow-sm h-100">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'Checked out'|t }}</p>
+              <div class="display-6 fw-semibold">{{ batteries.borrowed }}</div>
+              <p class="text-muted small mb-0">
+                {{ '@count borrowers currently have batteries in use.'|t({'@count': batteries.borrower_count}) }}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm h-100">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'Ready to lend'|t }}</p>
+              <div class="display-6 fw-semibold">{{ batteries.available }}</div>
+              <p class="text-muted small mb-0">{{ 'Charged and available packs.'|t }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm h-100">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'Missing or service'|t }}</p>
+              <div class="display-6 fw-semibold">{{ batteries.missing + batteries.other }}</div>
+              <p class="text-muted small mb-0">{{ 'Flagged as missing or awaiting maintenance.'|t }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="text-muted small mt-2">
+        {{ 'Totals pull from the battery entity’s status field; counts update whenever a transaction borrows or returns a battery.'|t }}
+      </p>
+    </section>
+  {% endif %}
+
+  {% set retention = stats.retention_insights|default([]) %}
+  {% set borrower_insight = retention.borrower|default({'count': 0, 'average': null, 'median': null}) %}
+  {% set non_borrower_insight = retention.non_borrower|default({'count': 0, 'average': null, 'median': null}) %}
+  {% if borrower_insight.count or non_borrower_insight.count %}
+    <section class="mb-5" aria-labelledby="retention-heading">
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+          <p class="text-uppercase text-muted small mb-1">{{ 'Retention signal'|t }}</p>
+          <h2 class="h4 mb-0" id="retention-heading">{{ 'Did borrowers stay members longer?'|t }}</h2>
+        </div>
+        <p class="text-muted small mb-0">
+          {{ 'Calculated from member profile creation to recorded end date (former members only).'|t }}
+        </p>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-body p-0">
+          {% set retention_rows = [
+            {'label': 'Former borrowers'|t, 'data': borrower_insight},
+            {'label': 'Former members (no borrower role)'|t, 'data': non_borrower_insight}
+          ] %}
+          <table class="table mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th scope="col">{{ 'Cohort'|t }}</th>
+                <th scope="col" class="text-end">{{ 'Former members'|t }}</th>
+                <th scope="col" class="text-end">{{ 'Average length (days)'|t }}</th>
+                <th scope="col" class="text-end">{{ 'Median length (days)'|t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in retention_rows %}
+                {% set data = row.data %}
+                <tr>
+                  <th scope="row">{{ row.label }}</th>
+                  <td class="text-end">{{ data.count }}</td>
+                  <td class="text-end">
+                    {% if data.average is not null %}
+                      {{ data.average|number_format(1) }}
+                      <span class="text-muted small d-block">
+                        {{ '≈ @months months'|t({'@months': (data.average / 30)|number_format(1) }) }}
+                      </span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if data.median is not null %}
+                      {{ data.median|number_format(1) }}
+                      <span class="text-muted small d-block">
+                        {{ '≈ @months months'|t({'@months': (data.median / 30)|number_format(1) }) }}
+                      </span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% set cohort_rows = stats.retention_cohorts|default([]) %}
+  {% if cohort_rows %}
+    <section class="mb-5" aria-labelledby="cohort-heading">
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+          <p class="text-uppercase text-muted small mb-1">{{ 'Active membership by join year'|t }}</p>
+          <h2 class="h4 mb-0" id="cohort-heading">{{ 'Borrowers vs non-borrowers'|t }}</h2>
+        </div>
+        <p class="text-muted small mb-0">{{ 'Shows the share of members from each join year who still hold the member role today.'|t }}</p>
+      </div>
+      <div class="card shadow-sm">
+        <div class="card-body p-0">
+          <table class="table mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th scope="col">{{ 'Join year'|t }}</th>
+                <th scope="col" class="text-end">{{ 'Borrowers active'|t }}</th>
+                <th scope="col" class="text-end">{{ 'Non-borrowers active'|t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in cohort_rows %}
+                <tr>
+                  <th scope="row">{{ row.year }}</th>
+                  <td class="text-end">
+                    {% if row.borrower.total %}
+                      {{ row.borrower.rate is not null ? row.borrower.rate|number_format(1) ~ '%' : '—' }}
+                      <span class="text-muted small d-block">
+                        {{ '@active of @total'|t({'@active': row.borrower.active, '@total': row.borrower.total}) }}
+                      </span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if row.non_borrower.total %}
+                      {{ row.non_borrower.rate is not null ? row.non_borrower.rate|number_format(1) ~ '%' : '—' }}
+                      <span class="text-muted small d-block">
+                        {{ '@active of @total'|t({'@active': row.non_borrower.active, '@total': row.non_borrower.total}) }}
+                      </span>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  <section aria-labelledby="library-links" class="mb-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
       <div>
-        <p class="text-uppercase text-muted small mb-1">{{ 'Data feeds'|t }}</p>
-        <h2 id="feeds-heading" class="h4 mb-0">{{ 'Reuse these insights elsewhere'|t }}</h2>
+        <p class="text-uppercase text-muted small mb-1">{{ 'Next steps'|t }}</p>
+        <h2 id="library-links" class="h4 mb-0">{{ 'Explore the lending library'|t }}</h2>
       </div>
     </div>
-    <p>{{ 'The makerspace_snapshots module or external dashboards can ingest the same data in two ways:'|t }}</p>
-    <ul>
-      <li>{{ 'Inject the <code>lending_library.stats_collector</code> service and call <code>::collect()</code> or <code>::buildSnapshotPayload()</code>.'|t|raw }}</li>
-      <li>{{ 'Request the JSON feed at <code>@url</code> (requires the original permission).'
-        |t({'@url': path('lending_library.stats_json')})|raw }}</li>
-    </ul>
-    <p>{{ 'The JSON response contains <code>current</code>, <code>periods</code>, <code>chart_data</code>, and a <code>snapshot</code> array that mirrors <code>drupalSettings.lendingLibraryStats</code>.'|t|raw }}</p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h3 class="h5">{{ 'Browse all tools'|t }}</h3>
+            <p class="text-muted">{{ 'See the full catalog, availability, and waitlist info.'|t }}</p>
+            <a class="btn btn-outline-primary" href="/library">{{ 'Visit the catalog'|t }}</a>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <h3 class="h5">{{ 'Borrowed items queue'|t }}</h3>
+            <p class="text-muted">{{ 'Staff view of checked-out tools, due dates, and renewals.'|t }}</p>
+            <a class="btn btn-outline-primary" href="/library/borrowed">{{ 'Open borrowed items'|t }}</a>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 </div>
