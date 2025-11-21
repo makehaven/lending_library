@@ -68,8 +68,10 @@ class StatsCollector implements StatsCollectorInterface {
     $current = $this->buildCurrentStats();
 
     $month_window = $this->getMonthSeriesWindow($now, 12);
-    $twelve_month_transactions = $this->loadWithdrawals($month_window['start'], $month_window['end']);
+    $twelve_month_dataset = $this->loadLoanDataset($month_window['start'], $month_window['end']);
+    $twelve_month_transactions = $twelve_month_dataset['transactions'];
     $monthly_series = $this->buildMonthlyLoanSeries($twelve_month_transactions, $month_window['start'], 12);
+    $monthly_value_series = $this->buildMonthlyLoanValueSeries($twelve_month_dataset, $month_window['start'], 12);
 
     $category_distribution = $this->buildCategoryDistribution($rolling_90_dataset);
     $battery_stats = $this->buildBatteryStats();
@@ -98,6 +100,7 @@ class StatsCollector implements StatsCollectorInterface {
       'chart_data' => [
         'monthly_loans' => $monthly_series,
         'top_categories' => $category_distribution,
+        'loan_value_vs_items' => $monthly_value_series,
       ],
       'batteries' => $battery_stats,
       'retention_insights' => $retention_insights,
@@ -582,6 +585,62 @@ class StatsCollector implements StatsCollectorInterface {
         $series[$key]['value']++;
       }
     }
+
+    return array_values($series);
+  }
+
+  /**
+   * Builds the monthly value dataset used to correlate loans vs. value.
+   */
+  protected function buildMonthlyLoanValueSeries(array $dataset, \DateTimeImmutable $start, int $months): array {
+    $transactions = $dataset['transactions'] ?? [];
+    $items = $dataset['items'] ?? [];
+
+    $series = [];
+    $itemBuckets = [];
+    for ($i = 0; $i < $months; $i++) {
+      $month_start = $start->modify("+$i months");
+      $key = $month_start->format('Y-m');
+      $series[$key] = [
+        'key' => $key,
+        'label' => $this->dateFormatter->format($month_start->getTimestamp(), 'custom', 'M Y'),
+        'loan_count' => 0,
+        'unique_items' => 0,
+        'total_value' => 0.0,
+      ];
+      $itemBuckets[$key] = [];
+    }
+
+    $end = $start->modify("+$months months");
+    foreach ($transactions as $transaction) {
+      $borrow_date = $this->getDateFromField($transaction->get(self::TRANSACTION_BORROW_DATE_FIELD));
+      if (!$borrow_date || $borrow_date < $start || $borrow_date >= $end) {
+        continue;
+      }
+      $key = $borrow_date->format('Y-m');
+      if (!isset($series[$key])) {
+        continue;
+      }
+
+      $series[$key]['loan_count']++;
+      $item_id = NULL;
+      if ($transaction->hasField(self::TRANSACTION_ITEM_FIELD) && !$transaction->get(self::TRANSACTION_ITEM_FIELD)->isEmpty()) {
+        $item_id = (int) $transaction->get(self::TRANSACTION_ITEM_FIELD)->target_id;
+      }
+
+      if ($item_id) {
+        $itemBuckets[$key][$item_id] = TRUE;
+        if (isset($items[$item_id]) && $items[$item_id] instanceof NodeInterface) {
+          $series[$key]['total_value'] += $this->getReplacementValue($items[$item_id]);
+        }
+      }
+    }
+
+    foreach ($series as $key => &$point) {
+      $point['unique_items'] = isset($itemBuckets[$key]) ? count($itemBuckets[$key]) : 0;
+      $point['total_value'] = round($point['total_value'], 2);
+    }
+    unset($point);
 
     return array_values($series);
   }
