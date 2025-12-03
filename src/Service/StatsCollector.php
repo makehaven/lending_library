@@ -36,6 +36,7 @@ class StatsCollector implements StatsCollectorInterface {
   protected const BATTERY_STATUS_FIELD = 'field_battery_status';
   protected const BATTERY_BORROWER_FIELD = 'field_battery_borrower';
   protected const BATTERY_STATUS_BORROWED = 'borrowed';
+  protected const MONTHLY_LOAN_SERIES_MIN_START = '2025-08-01';
   protected const UNCATEGORIZED_KEY = '__uncategorized';
 
   protected EntityTypeManagerInterface $entityTypeManager;
@@ -68,10 +69,22 @@ class StatsCollector implements StatsCollectorInterface {
     $current = $this->buildCurrentStats();
 
     $month_window = $this->getMonthSeriesWindow($now, 12);
-    $twelve_month_dataset = $this->loadLoanDataset($month_window['start'], $month_window['end']);
-    $twelve_month_transactions = $twelve_month_dataset['transactions'];
-    $monthly_series = $this->buildMonthlyLoanSeries($twelve_month_transactions, $month_window['start'], 12);
-    $monthly_value_series = $this->buildMonthlyLoanValueSeries($twelve_month_dataset, $month_window['start'], 12);
+    $series_start = $this->enforceMonthlySeriesStart($month_window['start']);
+    if ($series_start >= $month_window['end']) {
+      $twelve_month_dataset = [
+        'transactions' => [],
+        'items' => [],
+      ];
+      $monthly_series = [];
+      $monthly_value_series = [];
+    }
+    else {
+      $series_months = $this->calculateMonthSpan($series_start, $month_window['end']);
+      $twelve_month_dataset = $this->loadLoanDataset($series_start, $month_window['end']);
+      $twelve_month_transactions = $twelve_month_dataset['transactions'];
+      $monthly_series = $this->buildMonthlyLoanSeries($twelve_month_transactions, $series_start, $series_months);
+      $monthly_value_series = $this->buildMonthlyLoanValueSeries($twelve_month_dataset, $series_start, $series_months);
+    }
 
     $category_distribution = $this->buildCategoryDistribution($rolling_90_dataset);
     $battery_stats = $this->buildBatteryStats();
@@ -564,6 +577,10 @@ class StatsCollector implements StatsCollectorInterface {
    * Builds the month → loan count series.
    */
   protected function buildMonthlyLoanSeries(array $transactions, \DateTimeImmutable $start, int $months): array {
+    if ($months <= 0) {
+      return [];
+    }
+
     $series = [];
     for ($i = 0; $i < $months; $i++) {
       $month_start = $start->modify("+$i months");
@@ -593,6 +610,10 @@ class StatsCollector implements StatsCollectorInterface {
    * Builds the monthly value dataset used to correlate loans vs. value.
    */
   protected function buildMonthlyLoanValueSeries(array $dataset, \DateTimeImmutable $start, int $months): array {
+    if ($months <= 0) {
+      return [];
+    }
+
     $transactions = $dataset['transactions'] ?? [];
     $items = $dataset['items'] ?? [];
 
@@ -910,6 +931,25 @@ class StatsCollector implements StatsCollectorInterface {
       'start' => $start,
       'end' => $end,
     ];
+  }
+
+  /**
+   * Ensures the monthly chart never renders before the system launch date.
+   */
+  protected function enforceMonthlySeriesStart(\DateTimeImmutable $requested_start): \DateTimeImmutable {
+    $min_start = new \DateTimeImmutable(self::MONTHLY_LOAN_SERIES_MIN_START, $this->timezone);
+    return $requested_start < $min_start ? $min_start : $requested_start;
+  }
+
+  /**
+   * Returns the number of first-of-month intervals between start and end.
+   */
+  protected function calculateMonthSpan(\DateTimeImmutable $start, \DateTimeImmutable $end): int {
+    if ($start >= $end) {
+      return 0;
+    }
+    $interval = $start->diff($end);
+    return (int) (($interval->y * 12) + $interval->m);
   }
 
 }

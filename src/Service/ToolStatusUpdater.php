@@ -48,12 +48,14 @@ class ToolStatusUpdater {
   protected $logger;
   protected $currentUser;
   protected $time;
+  protected $lendingLibraryManager;
 
-  public function __construct(EntityTypeManagerInterface $entity_type_manager, LoggerChannelFactoryInterface $logger_factory, AccountInterface $current_user, TimeInterface $time) {
+  public function __construct(EntityTypeManagerInterface $entity_type_manager, LoggerChannelFactoryInterface $logger_factory, AccountInterface $current_user, TimeInterface $time, LendingLibraryManagerInterface $lending_library_manager) {
     $this->entityTypeManager = $entity_type_manager;
     $this->logger = $logger_factory->get('lending_library');
     $this->currentUser = $current_user;
     $this->time = $time;
+    $this->lendingLibraryManager = $lending_library_manager;
   }
 
   public function updateFromTransaction(EntityInterface $entity) {
@@ -82,7 +84,7 @@ class ToolStatusUpdater {
 
     switch ($action) {
       case self::LENDING_LIBRARY_ACTION_WITHDRAW:
-        $item_details = $this->getItemDetails($library_item_node);
+        $item_details = $this->lendingLibraryManager->getItemDetails($library_item_node);
 
         if ($item_details['status'] === self::LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && $item_details['borrower_uid'] != $transaction_borrower_uid) {
           $storage = $this->entityTypeManager->getStorage('library_transaction');
@@ -136,13 +138,14 @@ class ToolStatusUpdater {
                 if ($battery->hasField(self::LENDING_LIBRARY_BATTERY_CURRENT_ITEM_FIELD)) {
                   $battery->set(self::LENDING_LIBRARY_BATTERY_CURRENT_ITEM_FIELD, ['target_id' => $library_item_node->id()]);
                 }
-                $this->saveBatteryWithRevision(
+                $this->lendingLibraryManager->saveBatteryWithRevision(
                   $battery,
                   t('Borrowed with tool @tool (nid @nid) by user @uid.', [
                     '@tool' => $library_item_node->label(),
                     '@nid'  => $library_item_node->id(),
                     '@uid'  => $transaction_borrower_uid,
-                  ])
+                  ]),
+                  $transaction_borrower_uid
                 );
               }
             }
@@ -231,68 +234,6 @@ class ToolStatusUpdater {
 
     if ($save_item_node) {
       $library_item_node->save();
-    }
-  }
-
-  private function getItemDetails(NodeInterface $library_item_node = NULL) {
-    if (!$library_item_node || $library_item_node->bundle() !== self::LENDING_LIBRARY_ITEM_NODE_TYPE) {
-      return NULL;
-    }
-
-    $status = self::LENDING_LIBRARY_ITEM_STATUS_AVAILABLE;
-    if ($library_item_node->hasField(self::LENDING_LIBRARY_ITEM_STATUS_FIELD) && !$library_item_node->get(self::LENDING_LIBRARY_ITEM_STATUS_FIELD)->isEmpty()) {
-      $status = $library_item_node->get(self::LENDING_LIBRARY_ITEM_STATUS_FIELD)->value;
-    }
-    else {
-      $this->logger->warning('Library item node @nid is missing status field value. Defaulting to available.', ['@nid' => $library_item_node->id()]);
-    }
-
-    $borrower_uid = NULL;
-    if ($library_item_node->hasField(self::LENDING_LIBRARY_ITEM_BORROWER_FIELD) && !$library_item_node->get(self::LENDING_LIBRARY_ITEM_BORROWER_FIELD)->isEmpty()) {
-      $borrower_uid = (int) $library_item_node->get(self::LENDING_LIBRARY_ITEM_BORROWER_FIELD)->target_id;
-    }
-
-    $replacement_value = NULL;
-    if ($library_item_node->hasField(self::LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD) && !$library_item_node->get(self::LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->isEmpty()) {
-      $raw_value = $library_item_node->get(self::LENDING_LIBRARY_ITEM_REPLACEMENT_VALUE_FIELD)->value;
-      if (is_numeric($raw_value)) {
-        $replacement_value = $raw_value;
-      }
-    }
-
-    return [
-      'status' => $status,
-      'borrower_uid' => $borrower_uid,
-      'replacement_value' => $replacement_value,
-    ];
-  }
-
-  private function saveBatteryWithRevision(EntityInterface $battery, $message = '', $uid = NULL) {
-    try {
-      if ($battery->getEntityType()->isRevisionable()) {
-        $battery->setNewRevision(TRUE);
-
-        if ($uid === NULL) {
-          $uid = $this->currentUser->id();
-        }
-        if (method_exists($battery, 'setRevisionUserId')) {
-          $battery->setRevisionUserId($uid);
-        }
-        if (method_exists($battery, 'setRevisionCreationTime')) {
-          $battery->setRevisionCreationTime($this->time->getRequestTime());
-        }
-        if (method_exists($battery, 'setRevisionLogMessage') && $message !== '') {
-          $battery->setRevisionLogMessage($message);
-        }
-      }
-
-      $battery->save();
-    }
-    catch (\Exception $e) {
-      $this->logger->error('Failed to save battery @id: @msg', [
-        '@id' => method_exists($battery, 'id') ? $battery->id() : 'unknown',
-        '@msg' => $e->getMessage(),
-      ]);
     }
   }
 }

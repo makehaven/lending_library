@@ -58,7 +58,18 @@ class BatteryReturnConfirmForm extends ConfirmFormBase {
     $this->battery->set('field_battery_status', 'available');
     $this->battery->set('field_battery_borrower', NULL);
     $this->battery->set('field_battery_current_item', NULL);
-    $this->battery->save();
+
+    // Use the module helper to save with revision log.
+    if (function_exists('_lending_library_battery_save_with_revision')) {
+      _lending_library_battery_save_with_revision(
+        $this->battery,
+        $this->t('Returned independently (battery only) by user @uid via return form.', ['@uid' => \Drupal::currentUser()->id()])
+      );
+    }
+    else {
+      // Fallback if module function not found (unlikely).
+      $this->battery->save();
+    }
 
     // 2. Find the transaction and remove the battery from it.
     $query = \Drupal::entityQuery('library_transaction')

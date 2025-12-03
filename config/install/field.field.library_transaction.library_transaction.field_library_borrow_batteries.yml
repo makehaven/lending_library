@@ -16,10 +16,11 @@ translatable: false
 default_value: {  }
 default_value_callback: ''
 settings:
-  handler: views
+  handler: 'default:battery'
   handler_settings:
-    view:
-      view_name: battery_l
-      display_name: batteries_available
-      arguments: {  }
+    target_bundles:
+      battery: battery
+    sort:
+      field: _none
+    auto_create: false
 field_type: entity_reference

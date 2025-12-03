@@ -1,7 +1,7 @@
 services:
   lending_library.tool_status_updater:
     class: Drupal\lending_library\Service\ToolStatusUpdater
-    arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time']
+    arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time', '@lending_library.manager']
 
   lending_library.stats_collector:
     class: Drupal\lending_library\Service\StatsCollector
@@ -9,3 +9,16 @@ services:
       - '@entity_type.manager'
       - '@date.formatter'
       - '@datetime.time'
+
+  lending_library.manager:
+    class: Drupal\lending_library\Service\LendingLibraryManager
+    arguments:
+      - '@entity_type.manager'
+      - '@config.factory'
+      - '@logger.factory'
+      - '@current_user'
+      - '@datetime.time'
+      - '@date.formatter'
+      - '@plugin.manager.mail'
+      - '@language_manager'
+      - '@entity_field.manager'

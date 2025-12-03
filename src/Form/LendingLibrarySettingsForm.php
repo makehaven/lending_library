@@ -624,6 +624,26 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
     return parent::buildForm($form, $form_state);
   }
 
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    parent::validateForm($form, $form_state);
+
+    $email_validator = \Drupal::service('email.validator');
+    $email_fields = ['email_staff_address', 'email_damaged_address'];
+
+    foreach ($email_fields as $field) {
+      $value = $form_state->getValue($field);
+      if (!empty($value)) {
+        $emails = explode(',', $value);
+        foreach ($emails as $email) {
+          $email = trim($email);
+          if (!empty($email) && !$email_validator->isValid($email)) {
+            $form_state->setErrorByName($field, $this->t('The email address %mail is not valid.', ['%mail' => $email]));
+          }
+        }
+      }
+    }
+  }
+
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('lending_library.settings');
 
