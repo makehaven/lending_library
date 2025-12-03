@@ -36,7 +36,7 @@ class StatsCollector implements StatsCollectorInterface {
   protected const BATTERY_STATUS_FIELD = 'field_battery_status';
   protected const BATTERY_BORROWER_FIELD = 'field_battery_borrower';
   protected const BATTERY_STATUS_BORROWED = 'borrowed';
-  protected const MONTHLY_LOAN_SERIES_MIN_START = '2025-08-01';
+  protected const MONTHLY_LOAN_SERIES_MIN_START = '2021-08-01';
   protected const UNCATEGORIZED_KEY = '__uncategorized';
 
   protected EntityTypeManagerInterface $entityTypeManager;
@@ -69,7 +69,9 @@ class StatsCollector implements StatsCollectorInterface {
     $current = $this->buildCurrentStats();
 
     $month_window = $this->getMonthSeriesWindow($now, 12);
+    $month_window['end'] = $month_window['end']->modify('-1 month'); // End at previous full month
     $series_start = $this->enforceMonthlySeriesStart($month_window['start']);
+    
     if ($series_start >= $month_window['end']) {
       $twelve_month_dataset = [
         'transactions' => [],
@@ -86,7 +88,15 @@ class StatsCollector implements StatsCollectorInterface {
       $monthly_value_series = $this->buildMonthlyLoanValueSeries($twelve_month_dataset, $series_start, $series_months);
     }
 
+    // Full History Chart
+    $history_start = new \DateTimeImmutable(self::MONTHLY_LOAN_SERIES_MIN_START, $this->timezone);
+    $history_end = $month_window['end'];
+    $history_months = $this->calculateMonthSpan($history_start, $history_end);
+    $full_history_dataset = $this->loadLoanDataset($history_start, $history_end);
+    $full_history_series = $this->buildFullHistorySeries($full_history_dataset, $history_start, $history_months);
+
     $category_distribution = $this->buildCategoryDistribution($rolling_90_dataset);
+    $most_borrowed_tools = $this->buildMostBorrowedToolsAggregate();
     $battery_stats = $this->buildBatteryStats();
     $inventory_totals = $this->buildInventoryTotals();
     $retention_insights = $this->buildMembershipRetentionInsights();
@@ -112,7 +122,9 @@ class StatsCollector implements StatsCollectorInterface {
       ],
       'chart_data' => [
         'monthly_loans' => $monthly_series,
+        'full_history' => $full_history_series,
         'top_categories' => $category_distribution,
+        'most_borrowed_tools' => $most_borrowed_tools,
         'loan_value_vs_items' => $monthly_value_series,
       ],
       'batteries' => $battery_stats,
@@ -431,7 +443,7 @@ class StatsCollector implements StatsCollectorInterface {
     $profile_ids = $profile_storage->getQuery()
       ->accessCheck(FALSE)
       ->condition('type', 'main')
-      ->condition('created', $start_date->getTimestamp(), '>=')
+      ->condition('created', $start_date->getTimestamp(), '>=' )
       ->execute();
 
     if (empty($profile_ids)) {
@@ -565,7 +577,7 @@ class StatsCollector implements StatsCollectorInterface {
       ->accessCheck(FALSE)
       ->condition('type', self::TRANSACTION_BUNDLE)
       ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
-      ->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $start->format('Y-m-d'), '>=')
+      ->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $start->format('Y-m-d'), '>=' )
       ->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $end->format('Y-m-d'), '<')
       ->sort(self::TRANSACTION_BORROW_DATE_FIELD . '.value', 'ASC');
 
@@ -657,7 +669,7 @@ class StatsCollector implements StatsCollectorInterface {
       }
     }
 
-    foreach ($series as $key => &$point) {
+    foreach ($series as $key => & $point) {
       $point['unique_items'] = isset($itemBuckets[$key]) ? count($itemBuckets[$key]) : 0;
       $point['total_value'] = round($point['total_value'], 2);
     }
@@ -746,7 +758,8 @@ class StatsCollector implements StatsCollectorInterface {
       ->accessCheck(FALSE)
       ->condition('type', 'main')
       ->exists('field_member_end_date')
-      ->condition('field_member_end_date.value', '', '<>');
+      ->condition('field_member_end_date.value', '', '<>')
+      ->condition('created', strtotime('2021-01-01'), '>=' ); // Filter by creation date
     $profile_ids = $query->execute();
     if (empty($profile_ids)) {
       return [];
@@ -798,6 +811,167 @@ class StatsCollector implements StatsCollectorInterface {
       'borrower' => $this->summarizeLengthBucket($buckets['borrower']),
       'non_borrower' => $this->summarizeLengthBucket($buckets['non_borrower']),
     ];
+  }
+
+  /**
+   * Builds top 10 most borrowed tools using aggregate query for all-time stats.
+   */
+  protected function buildMostBorrowedToolsAggregate(int $limit = 10): array {
+    $alias = 'loan_count';
+    $query = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE)->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::TRANSACTION_BUNDLE)
+      ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
+      ->groupBy(self::TRANSACTION_ITEM_FIELD)
+      ->aggregate(self::TRANSACTION_ITEM_FIELD, 'COUNT', 'langcode', $alias);
+
+    $results = $query->execute();
+    
+    // Sort by count descending
+    usort($results, function($a, $b) use ($alias) {
+      return $b[$alias] <=> $a[$alias];
+    });
+
+    // Slice top N
+    $results = array_slice($results, 0, $limit);
+    
+    $output = [];
+    if (!empty($results)) {
+      $item_ids = array_column($results, self::TRANSACTION_ITEM_FIELD . '_target_id');
+      $items = $this->entityTypeManager->getStorage('node')->loadMultiple($item_ids);
+
+      foreach ($results as $result) {
+        $item_id = $result[self::TRANSACTION_ITEM_FIELD . '_target_id'];
+        $count = $result[$alias];
+        $label = isset($items[$item_id]) ? $items[$item_id]->label() : 'Unknown Item';
+        
+        $output[] = [
+          'label' => $label,
+          'value' => $count,
+        ];
+      }
+    }
+
+    return $output;
+  }
+
+  /**
+   * Builds top 10 most borrowed tools for the provided dataset.
+   */
+  protected function buildMostBorrowedTools(array $dataset, int $limit = 10): array {
+    $transactions = $dataset['transactions'];
+    $items = $dataset['items'];
+    if (empty($transactions) || empty($items)) {
+      return [];
+    }
+
+    $counts = [];
+    foreach ($transactions as $transaction) {
+      $item_id = NULL;
+      if ($transaction->hasField(self::TRANSACTION_ITEM_FIELD) && !$transaction->get(self::TRANSACTION_ITEM_FIELD)->isEmpty()) {
+        $item_id = (int) $transaction->get(self::TRANSACTION_ITEM_FIELD)->target_id;
+      }
+
+      if ($item_id) {
+        $counts[$item_id] = ($counts[$item_id] ?? 0) + 1;
+      }
+    }
+
+    arsort($counts);
+    $counts = array_slice($counts, 0, $limit, TRUE);
+
+    $output = [];
+    foreach ($counts as $item_id => $count) {
+      $label = isset($items[$item_id]) ? $items[$item_id]->label() : 'Unknown Item';
+      $output[] = [
+        'label' => $label,
+        'value' => $count,
+      ];
+    }
+
+    return $output;
+  }
+
+  /**
+   * Builds full history series (Loans, Users, Inventory).
+   */
+  protected function buildFullHistorySeries(array $dataset, \DateTimeImmutable $start, int $months): array {
+    if ($months <= 0) {
+      return [];
+    }
+
+    $transactions = $dataset['transactions'] ?? [];
+    
+    $buckets = [];
+    for ($i = 0; $i < $months; $i++) {
+      $month_start = $start->modify("+$i months");
+      $key = $month_start->format('Y-m');
+      $buckets[$key] = [
+        'loans' => 0,
+        'borrowers' => [],
+      ];
+    }
+    $end = $start->modify("+$months months");
+
+    foreach ($transactions as $transaction) {
+      $borrow_date = $this->getDateFromField($transaction->get(self::TRANSACTION_BORROW_DATE_FIELD));
+      if (!$borrow_date || $borrow_date < $start || $borrow_date >= $end) {
+        continue;
+      }
+      $key = $borrow_date->format('Y-m');
+      if (isset($buckets[$key])) {
+        $buckets[$key]['loans']++;
+        $uid = $this->getBorrowerId($transaction);
+        if ($uid) {
+          $buckets[$key]['borrowers'][$uid] = TRUE;
+        }
+      }
+    }
+
+    $node_query = $this->entityTypeManager->getStorage('node')->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->sort('created', 'ASC');
+    $nids = $node_query->execute();
+    $nodes = $this->entityTypeManager->getStorage('node')->loadMultiple($nids);
+    
+    $inventory_growth = [];
+    foreach ($nodes as $node) {
+      $created = (int) $node->getCreatedTime();
+      $month_key = $this->dateFormatter->format($created, 'custom', 'Y-m');
+      if (!isset($inventory_growth[$month_key])) {
+        $inventory_growth[$month_key] = 0;
+      }
+      $inventory_growth[$month_key]++;
+    }
+
+    $series = [];
+    $cumulative_inventory = 0;
+    foreach ($inventory_growth as $m_key => $count) {
+      if ($m_key < $start->format('Y-m')) {
+        $cumulative_inventory += $count;
+      }
+    }
+
+    for ($i = 0; $i < $months; $i++) {
+      $month_start = $start->modify("+$i months");
+      $key = $month_start->format('Y-m');
+      $label = $this->dateFormatter->format($month_start->getTimestamp(), 'custom', 'M Y');
+
+      if (isset($inventory_growth[$key])) {
+        $cumulative_inventory += $inventory_growth[$key];
+      }
+
+      $series[] = [
+        'key' => $key,
+        'label' => $label,
+        'loans' => $buckets[$key]['loans'],
+        'active_borrowers' => count($buckets[$key]['borrowers']),
+        'inventory' => $cumulative_inventory,
+      ];
+    }
+
+    return $series;
   }
 
   /**

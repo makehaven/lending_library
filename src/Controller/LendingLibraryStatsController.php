@@ -40,6 +40,7 @@ class LendingLibraryStatsController extends ControllerBase {
     $snapshot = $this->statsCollector->buildSnapshotPayload($stats);
     $charts = [
       'monthly' => $this->buildMonthlyLoansChart($stats['chart_data']['monthly_loans'] ?? []),
+      'full_history' => $this->buildFullHistoryChart($stats['chart_data']['full_history'] ?? []),
       'categories' => $this->buildCategoryBreakdownChart($stats['chart_data']['top_categories'] ?? []),
     ];
 
@@ -145,6 +146,108 @@ class LendingLibraryStatsController extends ControllerBase {
         'pointRadius' => 4,
       ],
     ];
+    $chart['xaxis'] = [
+      '#type' => 'chart_xaxis',
+      '#labels' => $labels,
+    ];
+
+    return $chart;
+  }
+
+  /**
+   * Builds a Chart.js line chart for full history (multi-series).
+   */
+  protected function buildFullHistoryChart(array $series): ?array {
+    if (empty($series)) {
+      return NULL;
+    }
+
+    $labels = array_column($series, 'label');
+    $loans = array_column($series, 'loans');
+    $borrowers = array_column($series, 'active_borrowers');
+    $inventory = array_column($series, 'inventory');
+
+    $chart = [
+      '#type' => 'chart',
+      '#chart_type' => 'line',
+      '#chart_library' => 'chartjs',
+      '#options' => [
+        'height' => 400,
+        'title' => $this->t('Lending Library Growth'),
+      ],
+      '#raw_options' => [
+        'options' => [
+          'interaction' => [
+            'mode' => 'index',
+            'intersect' => FALSE,
+          ],
+          'plugins' => [
+            'tooltip' => [
+              'mode' => 'index',
+              'intersect' => FALSE,
+            ],
+            'legend' => [
+              'position' => 'bottom',
+            ],
+          ],
+          'scales' => [
+            'y' => [
+              'beginAtZero' => TRUE,
+              'position' => 'left',
+              'title' => ['display' => TRUE, 'text' => $this->t('Activity (Loans/Users)')],
+            ],
+            'y1' => [
+              'beginAtZero' => TRUE,
+              'position' => 'right',
+              'grid' => ['drawOnChartArea' => FALSE], // Only show grid for primary axis
+              'title' => ['display' => TRUE, 'text' => $this->t('Inventory Size')],
+            ],
+          ],
+        ],
+      ],
+    ];
+
+    // Loans
+    $chart['loans'] = [
+      '#type' => 'chart_data',
+      '#title' => $this->t('Loans'),
+      '#data' => $loans,
+      '#color' => '#2563eb', // Blue
+      '#options' => [
+        'yAxisID' => 'y',
+        'tension' => 0.3,
+        'borderWidth' => 2,
+      ],
+    ];
+
+    // Active Borrowers
+    $chart['borrowers'] = [
+      '#type' => 'chart_data',
+      '#title' => $this->t('Active Borrowers'),
+      '#data' => $borrowers,
+      '#color' => '#16a34a', // Green
+      '#options' => [
+        'yAxisID' => 'y',
+        'tension' => 0.3,
+        'borderWidth' => 2,
+      ],
+    ];
+
+    // Inventory
+    $chart['inventory'] = [
+      '#type' => 'chart_data',
+      '#title' => $this->t('Inventory Items'),
+      '#data' => $inventory,
+      '#color' => '#9333ea', // Purple
+      '#options' => [
+        'yAxisID' => 'y1',
+        'tension' => 0.3,
+        'borderWidth' => 2,
+        'borderDash' => [5, 5],
+        'fill' => FALSE,
+      ],
+    ];
+
     $chart['xaxis'] = [
       '#type' => 'chart_xaxis',
       '#labels' => $labels,
