@@ -42,6 +42,9 @@ class LendingLibraryStatsController extends ControllerBase {
       'monthly' => $this->buildMonthlyLoansChart($stats['chart_data']['monthly_loans'] ?? []),
       'full_history' => $this->buildFullHistoryChart($stats['chart_data']['full_history'] ?? []),
       'categories' => $this->buildCategoryBreakdownChart($stats['chart_data']['top_categories'] ?? []),
+      'gender' => $this->buildDemographicPieChart($stats['demographics']['gender'] ?? []),
+      'age' => $this->buildDemographicBarChart($stats['demographics']['age'] ?? []),
+      'inventory_history' => $this->buildInventoryHistoryChart($stats['chart_data']['full_history'] ?? []),
     ];
 
     return [
@@ -100,6 +103,97 @@ class LendingLibraryStatsController extends ControllerBase {
    */
   public function redirectToStatsJson(): RedirectResponse {
     return new RedirectResponse(Url::fromRoute('lending_library.stats_json')->toString(), 301);
+  }
+
+  /**
+   * Builds a Chart.js pie chart for demographics.
+   */
+  protected function buildDemographicPieChart(array $data): ?array {
+    if (empty($data)) {
+      return NULL;
+    }
+    $labels = array_keys($data);
+    $values = array_values($data);
+
+    $chart = [
+      '#type' => 'chart',
+      '#chart_type' => 'pie',
+      '#chart_library' => 'chartjs',
+      '#options' => [
+        'height' => 300,
+      ],
+      '#raw_options' => [
+        'options' => [
+          'plugins' => [
+            'legend' => [
+              'position' => 'bottom',
+            ],
+            'tooltip' => [
+              'callbacks' => [
+                'label' => $this->buildPercentageTooltipCallback(),
+              ],
+            ],
+          ],
+        ],
+      ],
+    ];
+    $chart['series'] = [
+      '#type' => 'chart_data',
+      '#title' => $this->t('Gender Identity'),
+      '#data' => $values,
+      '#labels' => $labels,
+      '#colors' => $this->buildPalette(count($labels)),
+    ];
+    $chart['xaxis'] = [
+      '#type' => 'chart_xaxis',
+      '#labels' => $labels,
+    ];
+
+    return $chart;
+  }
+
+  /**
+   * Builds a Chart.js bar chart for age groups.
+   */
+  protected function buildDemographicBarChart(array $data): ?array {
+    if (empty($data)) {
+      return NULL;
+    }
+    ksort($data);
+    $labels = array_keys($data);
+    $values = array_values($data);
+
+    $chart = [
+      '#type' => 'chart',
+      '#chart_type' => 'column',
+      '#chart_library' => 'chartjs',
+      '#options' => [
+        'height' => 300,
+      ],
+      '#raw_options' => [
+        'options' => [
+          'plugins' => [
+            'tooltip' => [
+              'callbacks' => [
+                'label' => $this->buildPercentageTooltipCallback(),
+              ],
+            ],
+          ],
+        ],
+      ],
+    ];
+    $chart['series'] = [
+      '#type' => 'chart_data',
+      '#title' => $this->t('Borrowers'),
+      '#data' => $values,
+      '#color' => '#2563eb',
+    ];
+    $chart['xaxis'] = [
+      '#type' => 'chart_xaxis',
+      '#labels' => $labels,
+    ];
+
+    return $chart;
   }
 
   /**
@@ -168,8 +262,6 @@ class LendingLibraryStatsController extends ControllerBase {
     $labels = array_column($series, 'label');
     $loans = array_column($series, 'loans');
     $borrowers = array_column($series, 'active_borrowers');
-    $inventory = array_column($series, 'inventory');
-
     $chart = [
       '#type' => 'chart',
       '#chart_type' => 'line',
@@ -236,17 +328,82 @@ class LendingLibraryStatsController extends ControllerBase {
       ],
     ];
 
-    // Inventory
-    $chart['inventory'] = [
+    $chart['xaxis'] = [
+      '#type' => 'chart_xaxis',
+      '#labels' => $labels,
+    ];
+
+    return $chart;
+  }
+
+  /**
+   * Builds a chart showing inventory count and cumulative value.
+   */
+  protected function buildInventoryHistoryChart(array $series): ?array {
+    if (empty($series)) {
+      return NULL;
+    }
+
+    $labels = array_column($series, 'label');
+    $counts = array_map(static fn($value): int => (int) ($value ?? 0), array_column($series, 'inventory'));
+    $values = array_map(static fn($value): float => (float) ($value ?? 0), array_column($series, 'inventory_value'));
+
+    $chart = [
+      '#type' => 'chart',
+      '#chart_type' => 'line',
+      '#chart_library' => 'chartjs',
+      '#options' => [
+        'height' => 320,
+      ],
+      '#raw_options' => [
+        'options' => [
+          'plugins' => [
+            'legend' => ['position' => 'bottom'],
+          ],
+          'scales' => [
+            'y' => [
+              'beginAtZero' => TRUE,
+              'title' => ['display' => TRUE, 'text' => $this->t('Inventory count')],
+              'ticks' => [
+                'callback' => 'function(value){ return Number(value).toLocaleString(); }',
+              ],
+            ],
+            'y1' => [
+              'beginAtZero' => TRUE,
+              'position' => 'right',
+              'grid' => ['drawOnChartArea' => FALSE],
+              'title' => ['display' => TRUE, 'text' => $this->t('Inventory value')],
+              'ticks' => [
+                'callback' => 'function(value){ return "$" + Number(value).toLocaleString(); }',
+              ],
+            ],
+          ],
+        ],
+      ],
+    ];
+
+    $chart['count'] = [
       '#type' => 'chart_data',
-      '#title' => $this->t('Inventory Items'),
-      '#data' => $inventory,
-      '#color' => '#9333ea', // Purple
+      '#title' => $this->t('Items'),
+      '#data' => $counts,
+      '#color' => '#9333ea',
+      '#options' => [
+        'yAxisID' => 'y',
+        'borderWidth' => 2,
+        'tension' => 0.2,
+        'fill' => FALSE,
+      ],
+    ];
+
+    $chart['value'] = [
+      '#type' => 'chart_data',
+      '#title' => $this->t('Value'),
+      '#data' => $values,
+      '#color' => '#f97316',
       '#options' => [
         'yAxisID' => 'y1',
-        'tension' => 0.3,
         'borderWidth' => 2,
-        'borderDash' => [5, 5],
+        'tension' => 0.2,
         'fill' => FALSE,
       ],
     ];
@@ -284,6 +441,11 @@ class LendingLibraryStatsController extends ControllerBase {
               'position' => 'bottom',
               'labels' => [
                 'usePointStyle' => TRUE,
+              ],
+            ],
+            'tooltip' => [
+              'callbacks' => [
+                'label' => $this->buildPercentageTooltipCallback(),
               ],
             ],
           ],
@@ -327,6 +489,25 @@ class LendingLibraryStatsController extends ControllerBase {
       $palette[] = $base[$i % count($base)];
     }
     return $palette;
+  }
+
+  /**
+   * Tooltip callback that injects percentage into Chart.js popups.
+   */
+  protected function buildPercentageTooltipCallback(): string {
+    return "function(context) {
+      const dataset = context.dataset || {};
+      const data = dataset.data || [];
+      const total = data.reduce((sum, value) => sum + (Number(value) || 0), 0);
+      const rawValue = context.parsed !== undefined ? context.parsed : context.raw;
+      const value = Number(rawValue) || 0;
+      const pct = total ? ((value / total) * 100).toFixed(1) : 0;
+      let label = context.label || dataset.label || '';
+      if (!label && context.chart && context.chart.data && Array.isArray(context.chart.data.labels)) {
+        label = context.chart.data.labels[context.dataIndex] || '';
+      }
+      return (label ? label + ': ' : '') + value.toLocaleString() + ' (' + pct + '%)';
+    }";
   }
 
 }

@@ -40,6 +40,15 @@ class StatsCollector implements StatsCollectorInterface {
   protected const BATTERY_STATUS_BORROWED = 'borrowed';
   protected const MONTHLY_LOAN_SERIES_MIN_START = '2021-08-01';
   protected const UNCATEGORIZED_KEY = '__uncategorized';
+  protected const COLLAPSED_MEMBERSHIP_LABELS = [
+    'Partnership',
+    'Corporate',
+    'Provided',
+    'Household Additional',
+    'Unspecified membership type',
+    'Terminal Program',
+    'Student (Deprecated)',
+  ];
 
   protected EntityTypeManagerInterface $entityTypeManager;
   protected DateFormatterInterface $dateFormatter;
@@ -60,6 +69,12 @@ class StatsCollector implements StatsCollectorInterface {
    * {@inheritdoc}
    */
   public function collect(): array {
+    // Attempt to get cached data.
+    $cid = 'lending_library:stats_data';
+    if ($cache = \Drupal::cache()->get($cid)) {
+      return $cache->data;
+    }
+
     $now = $this->now();
 
     $last_month_bounds = $this->getLastMonthBounds($now);
@@ -99,12 +114,31 @@ class StatsCollector implements StatsCollectorInterface {
 
     $category_distribution = $this->buildCategoryDistribution($rolling_90_dataset);
     $most_borrowed_tools = $this->buildMostBorrowedToolsAggregate();
+    $year_start = $now->modify('-1 year');
+    $most_borrowed_tools_recent = $this->buildMostBorrowedToolsAggregate(10, $year_start, $now);
     $battery_stats = $this->buildBatteryStats();
     $inventory_totals = $this->buildInventoryTotals();
     $retention_insights = $this->buildMembershipRetentionInsights();
     $retention_cohorts = $this->buildMembershipCohorts();
     $lifecycle = $this->buildLifecycleAnalysis();
-    $demographics = $this->buildDemographics($rolling_90_dataset['transactions']);
+    $demographics = $this->buildDemographics();
+
+    $periods = [
+      'last_month' => [
+        'label' => $this->dateFormatter->format($last_month_bounds['start']->getTimestamp(), 'custom', 'F Y'),
+        'start' => $last_month_bounds['start']->getTimestamp(),
+        'end' => $last_month_bounds['end']->getTimestamp(),
+        'metrics' => $this->buildLoanSummary($last_month_dataset),
+      ],
+      'rolling_90_days' => [
+        'label' => $this->dateFormatter->format($rolling_90_bounds['start']->getTimestamp(), 'custom', 'M j') . ' – ' . $this->dateFormatter->format($rolling_90_bounds['end']->modify('-1 day')->getTimestamp(), 'custom', 'M j'),
+        'start' => $rolling_90_bounds['start']->getTimestamp(),
+        'end' => $rolling_90_bounds['end']->getTimestamp(),
+        'metrics' => $this->buildLoanSummary($rolling_90_dataset),
+      ],
+    ];
+
+    $retention_insights = $this->augmentRetentionInsights($retention_insights, $periods['rolling_90_days']['metrics'] ?? []);
 
     $stats = [
       'generated' => $now->getTimestamp(),
@@ -113,31 +147,23 @@ class StatsCollector implements StatsCollectorInterface {
       'lifecycle' => $lifecycle,
       'demographics' => $demographics,
       'all_time_loans' => $lifecycle['total_system_loans'] ?? 0,
-      'periods' => [
-        'last_month' => [
-          'label' => $this->dateFormatter->format($last_month_bounds['start']->getTimestamp(), 'custom', 'F Y'),
-          'start' => $last_month_bounds['start']->getTimestamp(),
-          'end' => $last_month_bounds['end']->getTimestamp(),
-          'metrics' => $this->buildLoanSummary($last_month_dataset),
-        ],
-        'rolling_90_days' => [
-          'label' => $this->dateFormatter->format($rolling_90_bounds['start']->getTimestamp(), 'custom', 'M j') . ' – ' . $this->dateFormatter->format($rolling_90_bounds['end']->modify('-1 day')->getTimestamp(), 'custom', 'M j'),
-          'start' => $rolling_90_bounds['start']->getTimestamp(),
-          'end' => $rolling_90_bounds['end']->getTimestamp(),
-          'metrics' => $this->buildLoanSummary($rolling_90_dataset),
-        ],
-      ],
+      'periods' => $periods,
       'chart_data' => [
         'monthly_loans' => $monthly_series,
         'full_history' => $full_history_series,
         'top_categories' => $category_distribution,
         'most_borrowed_tools' => $most_borrowed_tools,
+        'most_borrowed_tools_recent' => $most_borrowed_tools_recent,
         'loan_value_vs_items' => $monthly_value_series,
       ],
       'batteries' => $battery_stats,
       'retention_insights' => $retention_insights,
       'retention_cohorts' => $retention_cohorts,
     ];
+
+    // Cache the data for 1 hour.
+    // Invalidate if any library item or transaction changes.
+    \Drupal::cache()->set($cid, $stats, $now->getTimestamp() + 3600, ['library_transaction_list', 'node_list:library_item']);
 
     return $stats;
   }
@@ -395,9 +421,9 @@ class StatsCollector implements StatsCollectorInterface {
   }
 
   /**
-   * Builds demographic stats for a set of transactions using CiviCRM.
+   * Builds demographic stats for all borrowers using CiviCRM.
    */
-  protected function buildDemographics(array $transactions): array {
+  protected function buildDemographics(): array {
     if (!\Drupal::moduleHandler()->moduleExists('civicrm')) {
       return [];
     }
@@ -408,10 +434,19 @@ class StatsCollector implements StatsCollectorInterface {
       return [];
     }
 
+    // Aggregate query to get all unique borrowers
+    $query = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE)->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::TRANSACTION_BUNDLE)
+      ->exists(self::TRANSACTION_BORROWER_FIELD)
+      ->groupBy(self::TRANSACTION_BORROWER_FIELD . '.target_id');
+
+    $results = $query->execute();
+
     $uids = [];
-    foreach ($transactions as $transaction) {
-      $uid = $this->getBorrowerId($transaction);
-      if ($uid) {
+    foreach ($results as $res) {
+      if (!empty($res[self::TRANSACTION_BORROWER_FIELD . '_target_id'])) {
+        $uid = (int) $res[self::TRANSACTION_BORROWER_FIELD . '_target_id'];
         $uids[$uid] = $uid;
       }
     }
@@ -499,9 +534,84 @@ class StatsCollector implements StatsCollectorInterface {
       }
     }
 
+    $ethnicity = $this->buildEthnicityBreakdown(array_values($uids));
+
     return [
       'gender' => $gender_counts,
       'age' => array_filter($age_groups),
+      'ethnicity' => $ethnicity,
+    ];
+  }
+
+  /**
+   * Builds an ethnicity breakdown from member profiles.
+   */
+  protected function buildEthnicityBreakdown(array $uids): array {
+    if (empty($uids) || !$this->entityTypeManager->hasDefinition('profile')) {
+      return [];
+    }
+
+    $profile_storage = $this->entityTypeManager->getStorage('profile');
+    $profile_ids = $profile_storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', 'main')
+      ->condition('uid', $uids, 'IN')
+      ->execute();
+    if (empty($profile_ids)) {
+      return [];
+    }
+
+    $profiles = $profile_storage->loadMultiple($profile_ids);
+    $term_ids = [];
+    $counts = [];
+    $profiles_with_data = 0;
+
+    foreach ($profiles as $profile) {
+      if (!$profile->hasField('field_member_ethnicity') || $profile->get('field_member_ethnicity')->isEmpty()) {
+        continue;
+      }
+      $profile_has_value = FALSE;
+      foreach ($profile->get('field_member_ethnicity') as $item) {
+        $tid = isset($item->target_id) ? (int) $item->target_id : 0;
+        if ($tid <= 0) {
+          continue;
+        }
+        $counts[$tid] = ($counts[$tid] ?? 0) + 1;
+        $term_ids[$tid] = TRUE;
+        $profile_has_value = TRUE;
+      }
+      if ($profile_has_value) {
+        $profiles_with_data++;
+      }
+    }
+
+    if (empty($counts) || $profiles_with_data === 0) {
+      return [];
+    }
+
+    $labels = [];
+    if (!empty($term_ids) && $this->entityTypeManager->hasDefinition('taxonomy_term')) {
+      $terms = $this->entityTypeManager->getStorage('taxonomy_term')->loadMultiple(array_keys($term_ids));
+      foreach ($terms as $term) {
+        $labels[(int) $term->id()] = $term->label();
+      }
+    }
+
+    $entries = [];
+    foreach ($counts as $tid => $count) {
+      $label = $labels[$tid] ?? ('Term ' . $tid);
+      $entries[] = [
+        'tid' => $tid,
+        'label' => $label,
+        'count' => $count,
+        'share' => $profiles_with_data ? round(($count / $profiles_with_data) * 100, 1) : NULL,
+      ];
+    }
+    usort($entries, static fn(array $a, array $b): int => $b['count'] <=> $a['count']);
+
+    return [
+      'total_profiles' => $profiles_with_data,
+      'entries' => $entries,
     ];
   }
 
@@ -510,48 +620,55 @@ class StatsCollector implements StatsCollectorInterface {
    */
   protected function buildCurrentStats(): array {
     $node_storage = $this->entityTypeManager->getStorage('node');
-    $query = $node_storage->getQuery()
+
+    // 1. Status Counts
+    $count_alias = 'count';
+    $query = $node_storage->getAggregateQuery()
       ->accessCheck(FALSE)
-      ->condition('type', self::ITEM_NODE_TYPE);
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->groupBy(self::ITEM_STATUS_FIELD)
+      ->aggregate(self::ITEM_STATUS_FIELD, 'COUNT', NULL, $count_alias);
 
-    $ids = $query->execute();
-    $nodes = $ids ? $node_storage->loadMultiple($ids) : [];
-
-    $borrowers = [];
-    $value_on_loan = 0.0;
-    $total_active_value = 0.0;
-    $total_active_tools = 0;
+    $results = $query->execute();
     $status_counts = [];
+    foreach ($results as $res) {
+      $status_counts[$res[self::ITEM_STATUS_FIELD]] = (int) $res['count'];
+    }
 
-    foreach ($nodes as $node) {
-      if (!$node instanceof NodeInterface) {
-        continue;
-      }
+    // 2. Total Active Value (Non-Retired)
+    $sum_alias = 'sum';
+    $val_query = $node_storage->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->condition(self::ITEM_STATUS_FIELD, self::ITEM_STATUS_RETIRED, '<>')
+      ->condition(self::ITEM_STATUS_FIELD, self::ITEM_STATUS_MISSING, '<>')
+      ->aggregate(self::ITEM_REPLACEMENT_VALUE_FIELD, 'SUM', NULL, $sum_alias);
+    $val_res = $val_query->execute();
+    $total_active_value = $val_res[0]['sum'] ?? 0;
 
-      // Status counting
-      $status = 'unknown';
-      if ($node->hasField(self::ITEM_STATUS_FIELD) && !$node->get(self::ITEM_STATUS_FIELD)->isEmpty()) {
-        $status = $node->get(self::ITEM_STATUS_FIELD)->value;
-      }
-      if (!isset($status_counts[$status])) {
-        $status_counts[$status] = 0;
-      }
-      $status_counts[$status]++;
+    // 3. Value on Loan (Borrowed)
+    $loan_val_query = $node_storage->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->condition(self::ITEM_STATUS_FIELD, self::ITEM_STATUS_BORROWED)
+      ->aggregate(self::ITEM_REPLACEMENT_VALUE_FIELD, 'SUM', NULL, $sum_alias);
+    $loan_val_res = $loan_val_query->execute();
+    $value_on_loan = $loan_val_res[0]['sum'] ?? 0;
 
-      $val = $this->getReplacementValue($node);
+    // 4. Active Borrowers (Unique count)
+    $borrower_query = $node_storage->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->condition(self::ITEM_STATUS_FIELD, self::ITEM_STATUS_BORROWED)
+      ->exists(self::ITEM_BORROWER_FIELD)
+      ->groupBy(self::ITEM_BORROWER_FIELD . '.target_id');
+    $active_borrowers = $borrower_query->count()->execute();
 
-      // Active tools stats (everything not retired)
-      if ($status !== self::ITEM_STATUS_RETIRED) {
-        $total_active_tools++;
-        $total_active_value += $val;
-      }
-
-      // Borrowed specific stats
-      if ($status === self::ITEM_STATUS_BORROWED) {
-        $value_on_loan += $val;
-        if ($node->hasField(self::ITEM_BORROWER_FIELD) && !$node->get(self::ITEM_BORROWER_FIELD)->isEmpty()) {
-          $borrowers[$node->get(self::ITEM_BORROWER_FIELD)->target_id] = TRUE;
-        }
+    // Calculate total active tools count
+    $total_active_tools = 0;
+    foreach ($status_counts as $status => $count) {
+      if (!in_array($status, [self::ITEM_STATUS_RETIRED, self::ITEM_STATUS_MISSING], TRUE)) {
+        $total_active_tools += $count;
       }
     }
 
@@ -559,7 +676,7 @@ class StatsCollector implements StatsCollectorInterface {
 
     return [
       'active_loans' => $status_counts[self::ITEM_STATUS_BORROWED] ?? 0,
-      'active_borrowers' => count($borrowers),
+      'active_borrowers' => $active_borrowers,
       'inventory_value_on_loan' => round($value_on_loan, 2),
       'overdue_loans' => $overdue['count'],
       'borrowers_with_overdue' => $overdue['borrowers'],
@@ -750,29 +867,26 @@ class StatsCollector implements StatsCollectorInterface {
    * Builds the overall inventory totals (count + replacement value).
    */
   protected function buildInventoryTotals(): array {
-    $storage = $this->entityTypeManager->getStorage('node');
-    $query = $storage->getQuery()
+    $node_storage = $this->entityTypeManager->getStorage('node');
+
+    // Count
+    $count_query = $node_storage->getQuery()
       ->accessCheck(FALSE)
-      ->condition('type', self::ITEM_NODE_TYPE);
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->count();
+    $count = $count_query->execute();
 
-    $ids = $query->execute();
-    if (empty($ids)) {
-      return [
-        'count' => 0,
-        'value' => 0,
-      ];
-    }
-
-    $nodes = $storage->loadMultiple($ids);
-    $value = 0.0;
-    foreach ($nodes as $node) {
-      if ($node instanceof NodeInterface) {
-        $value += $this->getReplacementValue($node);
-      }
-    }
+    // Value Sum
+    $sum_alias = 'sum';
+    $value_query = $node_storage->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->aggregate(self::ITEM_REPLACEMENT_VALUE_FIELD, 'SUM', NULL, $sum_alias);
+    $value_res = $value_query->execute();
+    $value = $value_res[0]['sum'] ?? 0;
 
     return [
-      'count' => count($nodes),
+      'count' => $count,
       'value' => round($value, 2),
     ];
   }
@@ -1003,9 +1117,16 @@ class StatsCollector implements StatsCollectorInterface {
     $profiles = $profile_storage->loadMultiple($profile_ids);
     $user_storage = $this->entityTypeManager->getStorage('user');
     $buckets = [
-      'borrower' => [],
-      'non_borrower' => [],
+      'borrower' => [
+        'lengths' => [],
+        'payments' => [],
+      ],
+      'non_borrower' => [
+        'lengths' => [],
+        'payments' => [],
+      ],
     ];
+    $membership_type_buckets = [];
 
     foreach ($profiles as $profile) {
       if (!$profile->hasField('field_member_end_date') || $profile->get('field_member_end_date')->isEmpty()) {
@@ -1038,20 +1159,50 @@ class StatsCollector implements StatsCollectorInterface {
         continue;
       }
 
+      $length = $this->diffInDays($start_date, $end_date);
+      $monthly_payment = $this->getMonthlyPayment($profile);
       $bucket = $account->hasRole('borrower') ? 'borrower' : 'non_borrower';
-      $buckets[$bucket][] = $this->diffInDays($start_date, $end_date);
+      $buckets[$bucket]['lengths'][] = $length;
+      if ($monthly_payment !== NULL) {
+        $buckets[$bucket]['payments'][] = $monthly_payment;
+      }
+      $membership_type_id = $this->resolveMembershipTypeId($profile);
+      if (!isset($membership_type_buckets[$membership_type_id])) {
+        $membership_type_buckets[$membership_type_id] = [
+          'borrower' => [
+            'lengths' => [],
+            'payments' => [],
+          ],
+          'non_borrower' => [
+            'lengths' => [],
+            'payments' => [],
+          ],
+        ];
+      }
+      $membership_type_buckets[$membership_type_id][$bucket]['lengths'][] = $length;
+      if ($monthly_payment !== NULL) {
+        $membership_type_buckets[$membership_type_id][$bucket]['payments'][] = $monthly_payment;
+      }
     }
 
-    return [
-      'borrower' => $this->summarizeLengthBucket($buckets['borrower']),
-      'non_borrower' => $this->summarizeLengthBucket($buckets['non_borrower']),
+    $summary = [
+      'borrower' => $this->summarizeLengthBucket($buckets['borrower']['lengths'], $buckets['borrower']['payments']),
+      'non_borrower' => $this->summarizeLengthBucket($buckets['non_borrower']['lengths'], $buckets['non_borrower']['payments']),
+      'membership_types' => $this->summarizeMembershipTypeBuckets($membership_type_buckets),
     ];
+    if (!empty($summary['borrower']['ltv']) && !empty($summary['non_borrower']['ltv'])) {
+      $summary['ltv_difference'] = round($summary['borrower']['ltv'] - $summary['non_borrower']['ltv'], 2);
+    }
+    else {
+      $summary['ltv_difference'] = NULL;
+    }
+    return $summary;
   }
 
   /**
    * Builds top 10 most borrowed tools using aggregate query for all-time stats.
    */
-  protected function buildMostBorrowedToolsAggregate(int $limit = 10): array {
+  protected function buildMostBorrowedToolsAggregate(int $limit = 10, ?\DateTimeImmutable $start = NULL, ?\DateTimeImmutable $end = NULL): array {
     $alias = 'loan_count';
     $query = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE)->getAggregateQuery()
       ->accessCheck(FALSE)
@@ -1060,6 +1211,13 @@ class StatsCollector implements StatsCollectorInterface {
       ->exists(self::TRANSACTION_ITEM_FIELD)
       ->groupBy(self::TRANSACTION_ITEM_FIELD . '.target_id')
       ->aggregate(self::TRANSACTION_ITEM_FIELD . '.target_id', 'COUNT', NULL, $alias);
+
+    if ($start) {
+      $query->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $start->format('Y-m-d'), '>=');
+    }
+    if ($end) {
+      $query->condition(self::TRANSACTION_BORROW_DATE_FIELD . '.value', $end->format('Y-m-d'), '<');
+    }
 
     $results = $query->execute();
     
@@ -1175,28 +1333,49 @@ class StatsCollector implements StatsCollectorInterface {
       }
     }
 
-    $node_query = $this->entityTypeManager->getStorage('node')->getQuery()
+    $node_storage = $this->entityTypeManager->getStorage('node');
+    $node_query = $node_storage->getQuery()
       ->accessCheck(FALSE)
       ->condition('type', self::ITEM_NODE_TYPE)
       ->sort('created', 'ASC');
     $nids = $node_query->execute();
-    $nodes = $this->entityTypeManager->getStorage('node')->loadMultiple($nids);
+    $nodes = $node_storage->loadMultiple($nids);
     
-    $inventory_growth = [];
+    $inventory_changes = [];
+    $addChange = function(string $month_key, int $count_delta, float $value_delta) use (&$inventory_changes): void {
+      if (!isset($inventory_changes[$month_key])) {
+        $inventory_changes[$month_key] = [
+          'count' => 0,
+          'value' => 0.0,
+        ];
+      }
+      $inventory_changes[$month_key]['count'] += $count_delta;
+      $inventory_changes[$month_key]['value'] += $value_delta;
+    };
+
     foreach ($nodes as $node) {
       $created = (int) $node->getCreatedTime();
       $month_key = $this->dateFormatter->format($created, 'custom', 'Y-m');
-      if (!isset($inventory_growth[$month_key])) {
-        $inventory_growth[$month_key] = 0;
+      $value = $this->getReplacementValue($node);
+      $addChange($month_key, 1, $value);
+
+      $retirement_timestamp = $this->getRetirementTimestamp($node, $node_storage);
+      if ($retirement_timestamp) {
+        $retire_month = $this->dateFormatter->format($retirement_timestamp, 'custom', 'Y-m');
+        $addChange($retire_month, -1, -$value);
       }
-      $inventory_growth[$month_key]++;
     }
 
     $series = [];
     $cumulative_inventory = 0;
-    foreach ($inventory_growth as $m_key => $count) {
-      if ($m_key < $start->format('Y-m')) {
-        $cumulative_inventory += $count;
+    $cumulative_value = 0.0;
+    if (!empty($inventory_changes)) {
+      ksort($inventory_changes);
+      foreach ($inventory_changes as $m_key => $data) {
+        if ($m_key < $start->format('Y-m')) {
+          $cumulative_inventory += $data['count'];
+          $cumulative_value += $data['value'];
+        }
       }
     }
 
@@ -1205,8 +1384,9 @@ class StatsCollector implements StatsCollectorInterface {
       $key = $month_start->format('Y-m');
       $label = $this->dateFormatter->format($month_start->getTimestamp(), 'custom', 'M Y');
 
-      if (isset($inventory_growth[$key])) {
-        $cumulative_inventory += $inventory_growth[$key];
+      if (isset($inventory_changes[$key])) {
+        $cumulative_inventory += $inventory_changes[$key]['count'];
+        $cumulative_value += $inventory_changes[$key]['value'];
       }
 
       $series[] = [
@@ -1215,6 +1395,7 @@ class StatsCollector implements StatsCollectorInterface {
         'loans' => $buckets[$key]['loans'],
         'active_borrowers' => count($buckets[$key]['borrowers']),
         'inventory' => $cumulative_inventory,
+        'inventory_value' => round($cumulative_value, 2),
       ];
     }
 
@@ -1224,23 +1405,184 @@ class StatsCollector implements StatsCollectorInterface {
   /**
    * Summarizes membership lengths for a bucket.
    */
-  protected function summarizeLengthBucket(array $values): array {
+  protected function summarizeLengthBucket(array $values, array $payments = []): array {
     if (empty($values)) {
       return [
         'count' => 0,
         'average' => NULL,
         'median' => NULL,
+        'average_payment' => NULL,
+        'ltv' => NULL,
       ];
     }
     $count = count($values);
     sort($values, SORT_NUMERIC);
     $average = round(array_sum($values) / $count, 1);
+    $median = $this->calculateMedian($values);
+    $average_payment = NULL;
+    if (!empty($payments)) {
+      $average_payment = round(array_sum($payments) / count($payments), 2);
+    }
+    $ltv = NULL;
+    if ($average_payment !== NULL) {
+      $ltv = round($average_payment * ($average / 30), 2);
+    }
 
     return [
       'count' => $count,
       'average' => $average,
-      'median' => $this->calculateMedian($values),
+      'median' => $median,
+      'average_payment' => $average_payment,
+      'ltv' => $ltv,
     ];
+  }
+
+  /**
+   * Builds summaries grouped by membership type.
+   */
+  protected function summarizeMembershipTypeBuckets(array $buckets): array {
+    if (empty($buckets)) {
+      return [];
+    }
+
+    $tids = array_filter(array_keys($buckets));
+    $labels = $this->loadMembershipTypeLabels($tids);
+    $output = [];
+    $collapsedBucket = [
+      'label' => 'Other membership types',
+      'borrower' => [
+        'lengths' => [],
+        'payments' => [],
+      ],
+      'non_borrower' => [
+        'lengths' => [],
+        'payments' => [],
+      ],
+    ];
+    $hasCollapsedData = FALSE;
+
+    foreach ($buckets as $tid => $values) {
+      $borrower_lengths = $values['borrower']['lengths'] ?? [];
+      $borrower_payments = $values['borrower']['payments'] ?? [];
+      $non_lengths = $values['non_borrower']['lengths'] ?? [];
+      $non_payments = $values['non_borrower']['payments'] ?? [];
+      $total_lengths = array_merge($borrower_lengths, $non_lengths);
+      $total_payments = array_merge($borrower_payments, $non_payments);
+      $total_summary = $this->summarizeLengthBucket($total_lengths, $total_payments);
+      if (empty($total_summary['count'])) {
+        continue;
+      }
+      $label = $labels[$tid] ?? ($tid ? 'Membership Type ' . $tid : 'Unspecified membership type');
+      if (in_array($label, self::COLLAPSED_MEMBERSHIP_LABELS, TRUE)) {
+        if (!empty($borrower_lengths)) {
+          $collapsedBucket['borrower']['lengths'] = array_merge($collapsedBucket['borrower']['lengths'], $borrower_lengths);
+        }
+        if (!empty($borrower_payments)) {
+          $collapsedBucket['borrower']['payments'] = array_merge($collapsedBucket['borrower']['payments'], $borrower_payments);
+        }
+        if (!empty($non_lengths)) {
+          $collapsedBucket['non_borrower']['lengths'] = array_merge($collapsedBucket['non_borrower']['lengths'], $non_lengths);
+        }
+        if (!empty($non_payments)) {
+          $collapsedBucket['non_borrower']['payments'] = array_merge($collapsedBucket['non_borrower']['payments'], $non_payments);
+        }
+        $hasCollapsedData = TRUE;
+        continue;
+      }
+      $output[] = [
+        'tid' => $tid,
+        'label' => $label,
+        'total' => $total_summary,
+        'borrower' => $this->summarizeLengthBucket($borrower_lengths, $borrower_payments),
+        'non_borrower' => $this->summarizeLengthBucket($non_lengths, $non_payments),
+      ];
+    }
+
+    if ($hasCollapsedData) {
+      $collapsed_total_lengths = array_merge($collapsedBucket['borrower']['lengths'], $collapsedBucket['non_borrower']['lengths']);
+      $collapsed_total_payments = array_merge($collapsedBucket['borrower']['payments'], $collapsedBucket['non_borrower']['payments']);
+      $collapsed_summary = $this->summarizeLengthBucket($collapsed_total_lengths, $collapsed_total_payments);
+      if (!empty($collapsed_summary['count'])) {
+        $output[] = [
+          'tid' => 0,
+          'label' => $collapsedBucket['label'],
+          'total' => $collapsed_summary,
+          'borrower' => $this->summarizeLengthBucket($collapsedBucket['borrower']['lengths'], $collapsedBucket['borrower']['payments']),
+          'non_borrower' => $this->summarizeLengthBucket($collapsedBucket['non_borrower']['lengths'], $collapsedBucket['non_borrower']['payments']),
+        ];
+      }
+    }
+
+    usort($output, static fn(array $a, array $b): int => ($b['total']['count'] ?? 0) <=> ($a['total']['count'] ?? 0));
+    return $output;
+  }
+
+  /**
+   * Adds contextual metrics (LTV deltas, per-loan value) to retention data.
+   */
+  protected function augmentRetentionInsights(array $insights, array $rolling_metrics = []): array {
+    $avg_loans_recent = $rolling_metrics['average_loans_per_borrower'] ?? NULL;
+    $insights['average_loans_per_borrower_recent'] = ($avg_loans_recent && $avg_loans_recent > 0) ? $avg_loans_recent : NULL;
+
+    $estimated_lifetime_loans = NULL;
+    if (!empty($insights['average_loans_per_borrower_recent']) && !empty($insights['borrower']['average'])) {
+      $avg_loans_per_day = $insights['average_loans_per_borrower_recent'] / 90;
+      if ($avg_loans_per_day > 0) {
+        $estimated_lifetime_loans = round($avg_loans_per_day * (float) $insights['borrower']['average'], 2);
+      }
+    }
+    $insights['estimated_lifetime_loans_per_borrower'] = $estimated_lifetime_loans;
+
+    if (!empty($insights['ltv_difference']) && $estimated_lifetime_loans && $estimated_lifetime_loans > 0) {
+      $insights['ltv_value_per_loan'] = round($insights['ltv_difference'] / $estimated_lifetime_loans, 2);
+    }
+    else {
+      $insights['ltv_value_per_loan'] = NULL;
+    }
+
+    return $insights;
+  }
+
+  /**
+   * Loads taxonomy labels for membership type IDs.
+   */
+  protected function loadMembershipTypeLabels(array $tids): array {
+    if (empty($tids) || !$this->entityTypeManager->hasDefinition('taxonomy_term')) {
+      return [];
+    }
+    $storage = $this->entityTypeManager->getStorage('taxonomy_term');
+    $terms = $storage->loadMultiple(array_unique($tids));
+    $labels = [];
+    foreach ($terms as $term) {
+      $labels[(int) $term->id()] = $term->label();
+    }
+    return $labels;
+  }
+
+  /**
+   * Resolves the membership type taxonomy ID from a profile.
+   */
+  protected function resolveMembershipTypeId(EntityInterface $profile): int {
+    if ($profile->hasField('field_membership_type') && !$profile->get('field_membership_type')->isEmpty()) {
+      $item = $profile->get('field_membership_type')->first();
+      if ($item && isset($item->target_id)) {
+        return (int) $item->target_id;
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Extracts the monthly payment amount from a profile.
+   */
+  protected function getMonthlyPayment(EntityInterface $profile): ?float {
+    if ($profile->hasField('field_member_payment_monthly') && !$profile->get('field_member_payment_monthly')->isEmpty()) {
+      $value = $profile->get('field_member_payment_monthly')->value;
+      if ($value !== NULL && $value !== '') {
+        return (float) $value;
+      }
+    }
+    return NULL;
   }
 
   /**
@@ -1308,6 +1650,37 @@ class StatsCollector implements StatsCollectorInterface {
       return is_numeric($raw) ? (float) $raw : 0.0;
     }
     return 0.0;
+  }
+
+  /**
+   * Finds the timestamp when a node was first marked retired or missing.
+   */
+  protected function getRetirementTimestamp(NodeInterface $node, $node_storage): ?int {
+    if (!method_exists($node_storage, 'revisionIds')) {
+      return NULL;
+    }
+    $rev_ids = $node_storage->revisionIds($node);
+    if (empty($rev_ids)) {
+      return NULL;
+    }
+    $previous_status = NULL;
+    foreach ($rev_ids as $rid) {
+      $revision = $node_storage->loadRevision($rid);
+      if (!$revision instanceof NodeInterface) {
+        continue;
+      }
+      $status = NULL;
+      if ($revision->hasField(self::ITEM_STATUS_FIELD) && !$revision->get(self::ITEM_STATUS_FIELD)->isEmpty()) {
+        $status = $revision->get(self::ITEM_STATUS_FIELD)->value;
+      }
+      $is_retired = in_array($status, [self::ITEM_STATUS_RETIRED, self::ITEM_STATUS_MISSING], TRUE);
+      $was_retired = in_array($previous_status, [self::ITEM_STATUS_RETIRED, self::ITEM_STATUS_MISSING], TRUE);
+      if ($is_retired && !$was_retired) {
+        return $revision->getRevisionCreationTime();
+      }
+      $previous_status = $status;
+    }
+    return NULL;
   }
 
   /**
