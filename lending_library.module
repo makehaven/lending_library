@@ -235,6 +235,11 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
         if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['#access'] = FALSE;
         if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#access'] = FALSE;
         if (isset($form['field_library_inspection_notes'])) $form['field_library_inspection_notes']['#access'] = FALSE;
+
+        // Enable camera capture for the borrow inspection image.
+        if (isset($form['field_library_borrow_inspect_img']['widget'][0])) {
+          $form['field_library_borrow_inspect_img']['widget'][0]['#process'][] = '_lending_library_add_capture_attribute';
+        }
         break;
 
         case LENDING_LIBRARY_ACTION_RETURN:
@@ -243,10 +248,14 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
           if (isset($form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD]['#access'] = FALSE;
           if (isset($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'] = FALSE;
           if (isset($form['field_library_borrow_inspect_img'])) $form['field_library_borrow_inspect_img']['#access'] = FALSE;
-          if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD]['#disabled'] = TRUE;
-
-          if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) {
-            $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#title'] = t('Did you have any issues with this tool?');
+                  if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD])) $form[LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD]['#disabled'] = TRUE;
+          
+                  // Enable camera capture for the return inspection image.
+                  if (isset($form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['widget'][0])) {
+                    $form[LENDING_LIBRARY_TRANSACTION_RETURN_IMAGE_FIELD]['widget'][0]['#process'][] = '_lending_library_add_capture_attribute';
+                  }
+          
+                  if (isset($form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD])) {            $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#title'] = t('Did you have any issues with this tool?');
             $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['#required'] = TRUE;
             $form[LENDING_LIBRARY_TRANSACTION_INSPECTION_ISSUES_FIELD]['widget']['#default_value'] = LENDING_LIBRARY_INSPECTION_NO_ISSUES;
           }
@@ -639,7 +648,21 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
         }
 
         \Drupal::messenger()->addStatus(t('@tool_name has been successfully returned. Thank you!', ['@tool_name' => $tool_name]));
-  
+
+        // Show put-back location if available.
+        if ($library_item_node) {
+          $loc_parts = [];
+          if ($library_item_node->hasField('field_library_location_row_item') && !$library_item_node->get('field_library_location_row_item')->isEmpty()) {
+            $loc_parts[] = t('Row: @row', ['@row' => $library_item_node->get('field_library_location_row_item')->value]);
+          }
+          if ($library_item_node->hasField('field_library_location_shelf_num') && !$library_item_node->get('field_library_location_shelf_num')->isEmpty()) {
+            $loc_parts[] = t('Shelf: @shelf', ['@shelf' => $library_item_node->get('field_library_location_shelf_num')->value]);
+          }
+          if (!empty($loc_parts)) {
+            \Drupal::messenger()->addStatus(t('Please put this item back at: @location', ['@location' => implode(', ', $loc_parts)]));
+          }
+        }
+
         // If the checkbox exists and is checked, return associated batteries.
         if ($form_state->getValue('lending_library_return_batteries') && $library_item_node instanceof \Drupal\node\NodeInterface) {
           $bats = _lending_library_load_borrowed_batteries($library_item_node->id(), $borrower_uid);
@@ -1394,6 +1417,7 @@ function lending_library_mail($key, &$message, $params) {
     '[notes]' => $params['notes'] ?? '',
     '[reporter]' => $params['reporter'] ?? '',
     '[item_url]' => $params['item_url'] ?? '',
+    '[return_image]' => $params['return_image_url'] ?? '',
     '[days_late]' => $params['days_late'] ?? '0',
     '[daily_fee]' => isset($params['daily_fee']) ? '$' . number_format($params['daily_fee'], 2) : '',
     '[late_fee_total]' => isset($params['late_fee_total']) ? '$' . number_format($params['late_fee_total'], 2) : '',
@@ -1409,8 +1433,8 @@ function lending_library_mail($key, &$message, $params) {
       break;
 
     case 'return_confirmation':
-      $subject = $cfg->get('email_return_subject') ?: 'Tool Return Confirmation';
-      $body_template = $cfg->get('email_return_body') ?: "Thanks! Your return has been recorded.\nTool: [tool_name]";
+      $subject = $cfg->get('email_return_subject') ?: 'Tool Return Confirmation: [tool_name]';
+      $body_template = $cfg->get('email_return_body') ?: "Thanks! Your return has been recorded.\n\nTool: [tool_name]\n\nNotes:\n[notes]\n\nReturn Photo:\n[return_image]";
       break;
 
     case 'issue_report_notice':

@@ -92,15 +92,34 @@
           </div>
         </div>
       {% endfor %}
-      {% set inventory = stats.inventory_totals|default({'count': 0, 'value': 0}) %}
-      <div class="col-12 col-sm-6 col-lg-3">
+    </div>
+
+    <div class="row g-3 mt-1">
+      <div class="col-12 col-lg-4">
         <div class="card shadow-sm h-100 border-0">
           <div class="card-body">
-            <p class="text-uppercase text-muted small mb-1">{{ 'Library footprint'|t }}</p>
-            <div class="display-6 fw-semibold">{{ inventory.count }}</div>
+            <p class="text-uppercase text-muted small mb-1">{{ 'Active Inventory'|t }}</p>
+            <div class="display-6 fw-semibold">{{ stats.current.total_active_tools|default(0) }}</div>
             <p class="text-muted small mb-0">
-              {{ 'Cataloged tools worth @value'|t({'@value': '$' ~ inventory.value|number_format(2, '.', ',')}) }}
+              {{ 'Total replacement value: @value'|t({'@value': '$' ~ stats.current.total_active_value|number_format(2, '.', ',')}) }}
             </p>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-8">
+        <div class="card shadow-sm h-100 border-0">
+          <div class="card-body">
+            <p class="text-uppercase text-muted small mb-1">{{ 'Status Breakdown'|t }}</p>
+            <div class="d-flex flex-wrap gap-4">
+              {% for status, count in stats.current.status_counts %}
+                <div class="d-flex align-items-center">
+                  <span class="fw-bold fs-5 me-2">{{ count }}</span>
+                  <span class="text-capitalize text-muted">{{ status|replace({'_': ' '}) }}</span>
+                </div>
+              {% else %}
+                <div class="text-muted">{{ 'No data available'|t }}</div>
+              {% endfor %}
+            </div>
           </div>
         </div>
       </div>
@@ -352,6 +371,118 @@
       </div>
     </div>
   </section>
+
+  {% if stats.all_time_loans > 0 or (stats.lifecycle.retired_count > 0 or stats.lifecycle.missing_count > 0) %}
+    {% set lifecycle = stats.lifecycle %}
+    <section class="mb-5" aria-labelledby="lifecycle-heading">
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+          <p class="text-uppercase text-muted small mb-1">{{ 'Cost & Efficiency'|t }}</p>
+          <h2 class="h4 mb-0" id="lifecycle-heading">{{ 'System Lifecycle & Usage'|t }}</h2>
+        </div>
+        <p class="text-muted small mb-0">{{ 'Analysis of all-time lending history and inventory loss.'|t }}</p>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-6 col-lg-3">
+          <div class="card shadow-sm h-100 border-0 bg-primary text-white">
+            <div class="card-body">
+              <p class="text-uppercase small mb-1 opacity-75">{{ 'All-Time Loans'|t }}</p>
+              <div class="display-6 fw-semibold">{{ stats.all_time_loans|number_format }}</div>
+              <p class="small mb-0 opacity-75">{{ 'Total checkouts since inception.'|t }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+          <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'System Loans per Loss'|t }}</p>
+              <div class="display-6 fw-semibold">{{ lifecycle.system_loans_per_loss }}</div>
+              <p class="text-muted small mb-0">{{ 'Average checkouts system-wide for every item retired or missing.'|t }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+          <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'System Cost per Loan'|t }}</p>
+              <div class="display-6 fw-semibold">${{ lifecycle.system_loss_per_loan|number_format(2) }}</div>
+              <p class="text-muted small mb-0">{{ 'Amortized cost of lost/retired inventory across all loans.'|t }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+          <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'Retired Inventory Value'|t }}</p>
+              <div class="display-6 fw-semibold">${{ lifecycle.total_retired_value|number_format(0) }}</div>
+              <p class="text-muted small mb-0">{{ '@count items retired normally.'|t({'@count': lifecycle.retired_count}) }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+          <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+              <p class="text-uppercase text-muted small mb-1">{{ 'Missing Inventory Value'|t }}</p>
+              <div class="display-6 fw-semibold text-danger">${{ lifecycle.total_missing_value|number_format(0) }}</div>
+              <p class="text-muted small mb-0">{{ '@count items currently marked missing.'|t({'@count': lifecycle.missing_count}) }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if stats.demographics.gender or stats.demographics.age %}
+    <section class="mb-5" aria-labelledby="demo-heading">
+      <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+        <div>
+          <p class="text-uppercase text-muted small mb-1">{{ 'Borrower Profile'|t }}</p>
+          <h2 class="h4 mb-0" id="demo-heading">{{ 'Who is borrowing?'|t }}</h2>
+        </div>
+        <p class="text-muted small mb-0">{{ 'Demographic breakdown of unique borrowers from the last 90 days (anonymized).'|t }}</p>
+      </div>
+      <div class="row g-3">
+        {% if stats.demographics.gender %}
+        <div class="col-md-6">
+          <div class="card shadow-sm h-100">
+            <div class="card-body">
+              <h5 class="card-title">{{ 'Gender Identity'|t }}</h5>
+              <table class="table table-sm mb-0">
+                <tbody>
+                {% for label, count in stats.demographics.gender %}
+                  <tr>
+                    <td>{{ label }}</td>
+                    <td class="text-end fw-bold">{{ count }}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        {% if stats.demographics.age %}
+        <div class="col-md-6">
+          <div class="card shadow-sm h-100">
+            <div class="card-body">
+              <h5 class="card-title">{{ 'Age Groups'|t }}</h5>
+              <table class="table table-sm mb-0">
+                <tbody>
+                {% for label, count in stats.demographics.age %}
+                  <tr>
+                    <td>{{ label }}</td>
+                    <td class="text-end fw-bold">{{ count }}</td>
+                  </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+  {% endif %}
 
   {% if stats.batteries is not empty %}
     {% set batteries = stats.batteries %}

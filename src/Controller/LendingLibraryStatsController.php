@@ -49,6 +49,9 @@ class LendingLibraryStatsController extends ControllerBase {
       '#stats' => $stats + ['snapshot' => $snapshot],
       '#charts' => $charts,
       '#attached' => [
+        'library' => [
+          'lending_library/lending_library.actions',
+        ],
         'drupalSettings' => [
           'lendingLibraryStats' => [
             'snapshot' => $snapshot,

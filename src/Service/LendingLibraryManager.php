@@ -443,6 +443,18 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
     if (!$item) return;
 
     $params = ['tool_name' => $item->label()];
+
+    if ($transaction->hasField('field_library_inspection_notes') && !$transaction->get('field_library_inspection_notes')->isEmpty()) {
+      $params['notes'] = $transaction->get('field_library_inspection_notes')->value;
+    }
+
+    if ($transaction->hasField('field_library_return_inspect_img') && !$transaction->get('field_library_return_inspect_img')->isEmpty()) {
+      $file = $transaction->get('field_library_return_inspect_img')->entity;
+      if ($file) {
+        $params['return_image_url'] = $file->createFileUrl(FALSE);
+      }
+    }
+
     $from = $this->configFactory->get('system.site')->get('mail');
     $this->mailManager->mail(
       'lending_library',

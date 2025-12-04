@@ -20,6 +20,8 @@ class StatsCollector implements StatsCollectorInterface {
   protected const ITEM_NODE_TYPE = 'library_item';
   protected const ITEM_STATUS_FIELD = 'field_library_item_status';
   protected const ITEM_STATUS_BORROWED = 'borrowed';
+  protected const ITEM_STATUS_RETIRED = 'retired';
+  protected const ITEM_STATUS_MISSING = 'missing';
   protected const ITEM_BORROWER_FIELD = 'field_library_item_borrower';
   protected const ITEM_REPLACEMENT_VALUE_FIELD = 'field_library_item_replacement_v';
   protected const ITEM_CATEGORY_FIELD = 'field_library_item_category';
@@ -101,11 +103,16 @@ class StatsCollector implements StatsCollectorInterface {
     $inventory_totals = $this->buildInventoryTotals();
     $retention_insights = $this->buildMembershipRetentionInsights();
     $retention_cohorts = $this->buildMembershipCohorts();
+    $lifecycle = $this->buildLifecycleAnalysis();
+    $demographics = $this->buildDemographics($rolling_90_dataset['transactions']);
 
     $stats = [
       'generated' => $now->getTimestamp(),
       'current' => $current,
       'inventory_totals' => $inventory_totals,
+      'lifecycle' => $lifecycle,
+      'demographics' => $demographics,
+      'all_time_loans' => $lifecycle['total_system_loans'] ?? 0,
       'periods' => [
         'last_month' => [
           'label' => $this->dateFormatter->format($last_month_bounds['start']->getTimestamp(), 'custom', 'F Y'),
@@ -299,24 +306,249 @@ class StatsCollector implements StatsCollectorInterface {
   }
 
   /**
+   * Builds lifecycle analysis for retired and missing items.
+   */
+  protected function buildLifecycleAnalysis(): array {
+    $node_storage = $this->entityTypeManager->getStorage('node');
+    $query = $node_storage->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::ITEM_NODE_TYPE)
+      ->condition(self::ITEM_STATUS_FIELD, [self::ITEM_STATUS_RETIRED, self::ITEM_STATUS_MISSING], 'IN');
+
+    $ids = $query->execute();
+    if (empty($ids)) {
+      return [
+        'retired_count' => 0,
+        'missing_count' => 0,
+        'total_retired_value' => 0.0,
+        'total_missing_value' => 0.0,
+        'avg_loans_before_retirement' => 0,
+        'avg_cost_per_loan_retired' => 0,
+      ];
+    }
+
+    $nodes = $node_storage->loadMultiple($ids);
+
+    // Get loan counts for these items
+    $count_alias = 'count';
+    $t_query = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE)->getAggregateQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::TRANSACTION_BUNDLE)
+      ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
+      ->condition(self::TRANSACTION_ITEM_FIELD, $ids, 'IN')
+      ->groupBy(self::TRANSACTION_ITEM_FIELD . '.target_id')
+      ->aggregate(self::TRANSACTION_ITEM_FIELD . '.target_id', 'COUNT', NULL, $count_alias);
+
+    $t_results = $t_query->execute();
+    $loan_counts = [];
+    foreach ($t_results as $res) {
+      $loan_counts[$res[self::TRANSACTION_ITEM_FIELD . '_target_id']] = $res['count'];
+    }
+
+    $retired_loans = [];
+    $retired_costs = [];
+    $total_retired_value = 0.0;
+    $total_missing_value = 0.0;
+    $retired_count = 0;
+    $missing_count = 0;
+
+    foreach ($nodes as $nid => $node) {
+      $status = $node->get(self::ITEM_STATUS_FIELD)->value;
+      $val = $this->getReplacementValue($node);
+      $loans = $loan_counts[$nid] ?? 0;
+
+      if ($status === self::ITEM_STATUS_RETIRED) {
+        $retired_count++;
+        $total_retired_value += $val;
+        $retired_loans[] = $loans;
+        if ($loans > 0) {
+          $retired_costs[] = $val / $loans;
+        }
+      } elseif ($status === self::ITEM_STATUS_MISSING) {
+        $missing_count++;
+        $total_missing_value += $val;
+      }
+    }
+
+    // Calculate global amortized cost (Total Loss / All Time Loans)
+    $total_loan_query = $this->entityTypeManager->getStorage(self::TRANSACTION_ENTITY_TYPE)->getQuery()
+      ->accessCheck(FALSE)
+      ->condition('type', self::TRANSACTION_BUNDLE)
+      ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
+      ->count();
+    $total_system_loans = $total_loan_query->execute();
+
+    $total_loss = $total_retired_value + $total_missing_value;
+    $total_dead_items = $retired_count + $missing_count;
+
+    return [
+      'retired_count' => $retired_count,
+      'missing_count' => $missing_count,
+      'total_retired_value' => round($total_retired_value, 2),
+      'total_missing_value' => round($total_missing_value, 2),
+      'avg_loans_before_retirement' => $retired_loans ? round(array_sum($retired_loans) / count($retired_loans), 1) : 0,
+      'avg_cost_per_loan_retired' => $retired_costs ? round(array_sum($retired_costs) / count($retired_costs), 2) : 0,
+      'system_loss_per_loan' => $total_system_loans > 0 ? round($total_loss / $total_system_loans, 2) : 0,
+      'system_loans_per_loss' => $total_dead_items > 0 ? round($total_system_loans / $total_dead_items, 1) : $total_system_loans,
+      'total_system_loans' => $total_system_loans,
+    ];
+  }
+
+  /**
+   * Builds demographic stats for a set of transactions using CiviCRM.
+   */
+  protected function buildDemographics(array $transactions): array {
+    if (!\Drupal::moduleHandler()->moduleExists('civicrm')) {
+      return [];
+    }
+    try {
+      \Drupal::service('civicrm')->initialize();
+    }
+    catch (\Exception $e) {
+      return [];
+    }
+
+    $uids = [];
+    foreach ($transactions as $transaction) {
+      $uid = $this->getBorrowerId($transaction);
+      if ($uid) {
+        $uids[$uid] = $uid;
+      }
+    }
+
+    if (empty($uids)) {
+      return [];
+    }
+
+    $contact_ids = [];
+    foreach ($uids as $uid) {
+      try {
+        $contact_id = \CRM_Core_BAO_UFMatch::getContactId($uid);
+        if ($contact_id) {
+          $contact_ids[] = $contact_id;
+        }
+      }
+      catch (\Exception $e) {
+        // Ignore
+      }
+    }
+
+    if (empty($contact_ids)) {
+      return [];
+    }
+
+    try {
+      $result = \civicrm_api3('Contact', 'get', [
+        'id' => ['IN' => $contact_ids],
+        'return' => ['gender_id', 'birth_date'],
+        'options' => ['limit' => 0],
+      ]);
+    }
+    catch (\Exception $e) {
+      return [];
+    }
+
+    if (empty($result['values'])) {
+      return [];
+    }
+
+    $gender_counts = [];
+    $age_groups = [
+      '18-24' => 0, '25-34' => 0, '35-44' => 0,
+      '45-54' => 0, '55-64' => 0, '65+' => 0,
+    ];
+
+    $gender_map = [];
+    try {
+      $gender_map = \CRM_Core_PseudoConstant::get('CRM_Contact_DAO_Contact', 'gender_id');
+    }
+    catch (\Exception $e) {
+      // Fallback if lookup fails
+    }
+
+    foreach ($result['values'] as $contact) {
+      // Gender
+      $gender_id = $contact['gender_id'] ?? NULL;
+      if ($gender_id) {
+        $label = $gender_map[$gender_id] ?? $gender_id;
+        if (!isset($gender_counts[$label])) {
+          $gender_counts[$label] = 0;
+        }
+        $gender_counts[$label]++;
+      }
+
+      // Age
+      if (!empty($contact['birth_date'])) {
+        try {
+          $birth = new \DateTime($contact['birth_date']);
+          $now = new \DateTime();
+          $age = $now->diff($birth)->y;
+          
+          if ($age >= 18 && $age <= 24) $grp = '18-24';
+          elseif ($age <= 34) $grp = '25-34';
+          elseif ($age <= 44) $grp = '35-44';
+          elseif ($age <= 54) $grp = '45-54';
+          elseif ($age <= 64) $grp = '55-64';
+          elseif ($age >= 65) $grp = '65+';
+          else $grp = 'Other';
+          
+          if ($grp !== 'Other') {
+             $age_groups[$grp]++;
+          }
+        } catch (\Exception $e) {}
+      }
+    }
+
+    return [
+      'gender' => $gender_counts,
+      'age' => array_filter($age_groups),
+    ];
+  }
+
+  /**
    * Builds the current operational snapshot.
    */
   protected function buildCurrentStats(): array {
     $node_storage = $this->entityTypeManager->getStorage('node');
     $query = $node_storage->getQuery()
       ->accessCheck(FALSE)
-      ->condition('type', self::ITEM_NODE_TYPE)
-      ->condition(self::ITEM_STATUS_FIELD, self::ITEM_STATUS_BORROWED);
+      ->condition('type', self::ITEM_NODE_TYPE);
 
     $ids = $query->execute();
     $nodes = $ids ? $node_storage->loadMultiple($ids) : [];
 
     $borrowers = [];
     $value_on_loan = 0.0;
+    $total_active_value = 0.0;
+    $total_active_tools = 0;
+    $status_counts = [];
 
     foreach ($nodes as $node) {
-      if ($node instanceof NodeInterface) {
-        $value_on_loan += $this->getReplacementValue($node);
+      if (!$node instanceof NodeInterface) {
+        continue;
+      }
+
+      // Status counting
+      $status = 'unknown';
+      if ($node->hasField(self::ITEM_STATUS_FIELD) && !$node->get(self::ITEM_STATUS_FIELD)->isEmpty()) {
+        $status = $node->get(self::ITEM_STATUS_FIELD)->value;
+      }
+      if (!isset($status_counts[$status])) {
+        $status_counts[$status] = 0;
+      }
+      $status_counts[$status]++;
+
+      $val = $this->getReplacementValue($node);
+
+      // Active tools stats (everything not retired)
+      if ($status !== self::ITEM_STATUS_RETIRED) {
+        $total_active_tools++;
+        $total_active_value += $val;
+      }
+
+      // Borrowed specific stats
+      if ($status === self::ITEM_STATUS_BORROWED) {
+        $value_on_loan += $val;
         if ($node->hasField(self::ITEM_BORROWER_FIELD) && !$node->get(self::ITEM_BORROWER_FIELD)->isEmpty()) {
           $borrowers[$node->get(self::ITEM_BORROWER_FIELD)->target_id] = TRUE;
         }
@@ -326,11 +558,14 @@ class StatsCollector implements StatsCollectorInterface {
     $overdue = $this->buildOverdueSummary();
 
     return [
-      'active_loans' => count($nodes),
+      'active_loans' => $status_counts[self::ITEM_STATUS_BORROWED] ?? 0,
       'active_borrowers' => count($borrowers),
       'inventory_value_on_loan' => round($value_on_loan, 2),
       'overdue_loans' => $overdue['count'],
       'borrowers_with_overdue' => $overdue['borrowers'],
+      'total_active_tools' => $total_active_tools,
+      'total_active_value' => round($total_active_value, 2),
+      'status_counts' => $status_counts,
     ];
   }
 
@@ -822,8 +1057,9 @@ class StatsCollector implements StatsCollectorInterface {
       ->accessCheck(FALSE)
       ->condition('type', self::TRANSACTION_BUNDLE)
       ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
-      ->groupBy(self::TRANSACTION_ITEM_FIELD)
-      ->aggregate(self::TRANSACTION_ITEM_FIELD, 'COUNT', 'langcode', $alias);
+      ->exists(self::TRANSACTION_ITEM_FIELD)
+      ->groupBy(self::TRANSACTION_ITEM_FIELD . '.target_id')
+      ->aggregate(self::TRANSACTION_ITEM_FIELD . '.target_id', 'COUNT', NULL, $alias);
 
     $results = $query->execute();
     
@@ -838,17 +1074,28 @@ class StatsCollector implements StatsCollectorInterface {
     $output = [];
     if (!empty($results)) {
       $item_ids = array_column($results, self::TRANSACTION_ITEM_FIELD . '_target_id');
-      $items = $this->entityTypeManager->getStorage('node')->loadMultiple($item_ids);
+      // Ensure no nulls or invalid IDs are passed to loadMultiple
+      $item_ids = array_filter($item_ids, function($id) {
+          return !empty($id) && (is_string($id) || is_int($id));
+      });
+      
+      if (!empty($item_ids)) {
+        $items = $this->entityTypeManager->getStorage('node')->loadMultiple($item_ids);
 
-      foreach ($results as $result) {
-        $item_id = $result[self::TRANSACTION_ITEM_FIELD . '_target_id'];
-        $count = $result[$alias];
-        $label = isset($items[$item_id]) ? $items[$item_id]->label() : 'Unknown Item';
-        
-        $output[] = [
-          'label' => $label,
-          'value' => $count,
-        ];
+        foreach ($results as $result) {
+          $item_id = $result[self::TRANSACTION_ITEM_FIELD . '_target_id'];
+          // Skip if ID was filtered out
+          if (empty($item_id) || !isset($items[$item_id])) {
+             continue;
+          }
+          $count = $result[$alias];
+          $label = $items[$item_id]->label();
+          
+          $output[] = [
+            'label' => $label,
+            'value' => $count,
+          ];
+        }
       }
     }
 
