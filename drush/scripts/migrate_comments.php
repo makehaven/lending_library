@@ -1,6 +1,6 @@
 <?php
 
-// Run with: lando drush scr modules/custom/lending_library/scripts/migrate_comments.php
+// Run with: lando drush scr modules/custom/lending_library/drush/scripts/migrate_comments.php
 
 use Drupal\node\Entity\Node;
 use Drupal\comment\Entity\Comment;
