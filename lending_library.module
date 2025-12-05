@@ -1315,7 +1315,9 @@ function _lending_library_battery_save_with_revision(EntityInterface $battery, $
  */
 function _lending_library_add_capture_attribute(&$element, FormStateInterface $form_state, &$complete_form) {
   if (isset($element['upload'])) {
-    $element['upload']['#attributes']['capture'] = 'environment';
+    // Remove capture to allow file system choice, but add styling class and library.
+    $element['upload']['#attributes']['class'][] = 'lending-library-camera-upload';
+    $element['#attached']['library'][] = 'lending_library/lending_library.camera_upload';
   }
   return $element;
 }
