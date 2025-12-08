@@ -695,7 +695,8 @@ class StatsCollector implements StatsCollectorInterface {
       ->accessCheck(FALSE)
       ->condition('type', self::TRANSACTION_BUNDLE)
       ->condition(self::TRANSACTION_ACTION_FIELD, self::ACTION_WITHDRAW)
-      ->condition(self::TRANSACTION_CLOSED_FIELD, 1, '<>');
+      ->condition(self::TRANSACTION_CLOSED_FIELD, 1, '<>')
+      ->condition(self::TRANSACTION_RETURN_DATE_FIELD, NULL, 'IS NULL');
 
     $today = $this->now()->format('Y-m-d');
     $query->condition(self::TRANSACTION_DUE_DATE_FIELD . '.value', $today, '<');

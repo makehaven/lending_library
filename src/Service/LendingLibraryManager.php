@@ -231,7 +231,7 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function calculateLateFee(EntityInterface $transaction) {
+  public function calculateLateFee(EntityInterface $transaction, DrupalDateTime $return_date = NULL) {
     if ($transaction->get(self::TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
       return NULL;
     }
@@ -243,7 +243,7 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
     }
 
     $due_date = $transaction->get(self::TRANSACTION_DUE_DATE_FIELD)->date;
-    $now = new DrupalDateTime('now');
+    $now = $return_date ?: new DrupalDateTime('now');
 
     if (!$due_date instanceof DrupalDateTime || $due_date >= $now) {
       return NULL;
@@ -313,8 +313,8 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
     if ($transaction->hasField('field_library_charge_battery')) {
       $transaction->set('field_library_charge_battery', $battery_charge);
     }
-    if ($transaction->hasField('field_field_library_amount_due')) {
-      $transaction->set('field_field_library_amount_due', $total_due);
+    if ($transaction->hasField('field_library_amount_due')) {
+      $transaction->set('field_library_amount_due', $total_due);
     }
 
     if ($transaction->hasField('field_library_30day_processed')) {
@@ -358,7 +358,7 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
     ] + $extra_params;
 
     $from = $this->configFactory->get('system.site')->get('mail');
-    $this->mailManager->mail(
+    $result = $this->mailManager->mail(
       'lending_library',
       $key,
       $borrower_user->getEmail(),
@@ -367,6 +367,21 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
       $from,
       TRUE
     );
+
+    if ($result['result']) {
+      $this->logger->info("Sent '@key' email to @email for transaction @tid.", [
+        '@key' => $key,
+        '@email' => $borrower_user->getEmail(),
+        '@tid' => $transaction->id(),
+      ]);
+    }
+    else {
+      $this->logger->error("Failed to send '@key' email to @email for transaction @tid.", [
+        '@key' => $key,
+        '@email' => $borrower_user->getEmail(),
+        '@tid' => $transaction->id(),
+      ]);
+    }
   }
 
   /**

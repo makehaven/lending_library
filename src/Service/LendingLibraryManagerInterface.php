@@ -4,6 +4,7 @@ namespace Drupal\lending_library\Service;
 
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\node\NodeInterface;
+use Drupal\Core\Datetime\DrupalDateTime;
 
 /**
  * Interface for the Lending Library Manager service.
@@ -70,11 +71,13 @@ interface LendingLibraryManagerInterface {
    *
    * @param \Drupal\Core\Entity\EntityInterface $transaction
    *   The transaction entity.
+   * @param \Drupal\Core\Datetime\DrupalDateTime|null $return_date
+   *   (Optional) The date the item was returned. Defaults to now.
    *
    * @return array|null
    *   An array with 'days_late' and 'late_fee' or NULL.
    */
-  public function calculateLateFee(EntityInterface $transaction);
+  public function calculateLateFee(EntityInterface $transaction, DrupalDateTime $return_date = NULL);
 
   /**
    * Calculates the value of unreturned batteries for a transaction.

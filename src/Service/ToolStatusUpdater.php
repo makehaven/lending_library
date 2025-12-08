@@ -181,7 +181,6 @@ class ToolStatusUpdater {
         // Find and close the original withdrawal transaction.
         $query = $this->entityTypeManager->getStorage('library_transaction')->getQuery()
           ->condition('field_library_item', $library_item_node->id())
-          ->condition('field_library_borrower', $transaction_borrower_uid)
           ->condition('field_library_action', 'withdraw')
           ->condition('field_library_closed', 1, '<>')
           ->sort('created', 'DESC')

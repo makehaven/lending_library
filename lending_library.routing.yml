@@ -166,3 +166,17 @@ lending_library.stats_json_alias:
     _format: 'json'
   requirements:
     _permission: 'view lending library stats'
+
+lending_library.dashboard:
+
+  path: '/library/manager'
+
+  defaults:
+
+    _controller: '\Drupal\lending_library\Controller\LendingLibraryDashboardController::dashboard'
+
+    _title: 'Lending Library Manager Dashboard'
+
+  requirements:
+
+    _permission: 'administer lending library configuration'

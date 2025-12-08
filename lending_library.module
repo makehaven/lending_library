@@ -594,6 +594,10 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
         // Check if the return is overdue and charge for unreturned batteries if so.
         $now = new DrupalDateTime('now');
+        if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)->isEmpty()) {
+          $now = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)->date;
+        }
+
         $t_query = \Drupal::entityQuery('library_transaction')
             ->condition(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, $library_item_node->id())
             ->condition(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD, $borrower_uid)
@@ -605,7 +609,7 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
             $due_date = $withdraw_transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
             if ($due_date < $now) { // Is overdue.
                 $config = \Drupal::config('lending_library.settings');
-                $late_fee_details = _lending_library_calculate_late_fee($withdraw_transaction);
+                $late_fee_details = _lending_library_calculate_late_fee($withdraw_transaction, $now);
                 $final_late_fee = 0;
 
                 if ($late_fee_details) {
@@ -618,8 +622,8 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
                 if ($final_late_fee > 0) {
                     $transaction_entity->set('field_library_charge_overdue', $final_late_fee);
-                    if ($transaction_entity->hasField('field_field_library_amount_due')) {
-                        $transaction_entity->set('field_field_library_amount_due', $final_late_fee);
+                    if ($transaction_entity->hasField('field_library_amount_due')) {
+                        $transaction_entity->set('field_library_amount_due', $final_late_fee);
                     }
                     $email_params = [
                         'amount_due' => $final_late_fee,
@@ -640,8 +644,8 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
             if ($unreturned_battery_charge > 0) {
                 $transaction_entity->set('field_library_charge_battery', $unreturned_battery_charge);
-                $current_due = $transaction_entity->hasField('field_field_library_amount_due') ? $transaction_entity->get('field_field_library_amount_due')->value : 0;
-                $transaction_entity->set('field_field_library_amount_due', $current_due + $unreturned_battery_charge);
+                $current_due = $transaction_entity->hasField('field_library_amount_due') ? $transaction_entity->get('field_library_amount_due')->value : 0;
+                $transaction_entity->set('field_library_amount_due', $current_due + $unreturned_battery_charge);
                 \Drupal::service('lending_library.manager')->sendEmailByKey($transaction_entity, 'condition_charge', ['amount_due' => $unreturned_battery_charge]);
                 $charge_applied = TRUE;
             }
@@ -866,7 +870,6 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // Now, find the original withdraw (or renew) transaction(s) and close them.
       $query = \Drupal::entityQuery('library_transaction')
         ->condition('field_library_item', $library_item_node->id())
-        ->condition('field_library_borrower', $transaction_borrower_uid)
         ->condition('field_library_action', ['withdraw', 'renew'], 'IN')
         ->condition('field_library_closed', 1, '<>')
         ->sort('created', 'DESC')
@@ -1009,6 +1012,7 @@ function lending_library_cron() {
     $t_query = \Drupal::entityQuery('library_transaction')
       ->condition(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD, $item->id())
       ->condition(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, 'withdraw')
+      ->condition('field_library_return_date', NULL, 'IS NULL')
       ->condition('field_library_closed', 1, '<>')
       ->sort('created', 'DESC')
       ->range(0, 1)
@@ -1129,8 +1133,8 @@ function lending_library_cron() {
  * Calculates late fee for a transaction.
  * @deprecated Use \Drupal::service('lending_library.manager')->calculateLateFee() instead.
  */
-function _lending_library_calculate_late_fee(EntityInterface $transaction) {
-  return \Drupal::service('lending_library.manager')->calculateLateFee($transaction);
+function _lending_library_calculate_late_fee(EntityInterface $transaction, $return_date = NULL) {
+  return \Drupal::service('lending_library.manager')->calculateLateFee($transaction, $return_date);
 }
 
 function _lending_library_process_non_return_charge(EntityInterface $transaction, $non_return_charge_percentage) {
@@ -1383,6 +1387,9 @@ function lending_library_mail($key, &$message, $params) {
     $message['from'] = $site_from;
   }
 
+  // Send as HTML.
+  $message['headers']['Content-Type'] = 'text/html; charset=UTF-8';
+
   // Optional Reply-To support (pass 'reply_to' via $params from caller).
   if (!empty($params['reply_to'])) {
     $message['headers']['Reply-To'] = $params['reply_to'];
@@ -1515,13 +1522,30 @@ function lending_library_entity_presave(EntityInterface $entity) {
 function lending_library_theme($existing, $type, $theme, $path) {
   $module_path = \Drupal::service('extension.list.module')->getPath('lending_library');
   return [
-    'lending_library_stats' => [
-      'variables' => [
-        'stats' => [],
-        'charts' => [],
-      ],
-      'template' => 'lending-library-stats',
-      'path' => $module_path . '/templates',
-    ],
-  ];
-}
+        'lending_library_stats' => [
+          'variables' => [
+            'stats' => [],
+            'charts' => [],
+          ],
+          'template' => 'lending-library-stats',
+          'path' => $module_path . '/templates',
+        ],
+                    'lending_library_dashboard' => [
+                      'variables' => [
+                        'stats' => [],
+                        'triggers' => [],
+                        'recent_activity' => [],
+                        'grouped_links' => [],
+                        'due_soon_items' => [],
+                        'overdue_items' => [],
+                        'debtors' => [],
+                        'key_stats' => [],
+                        'damaged_items' => [],
+                      ],
+                      'template' => 'lending-library-dashboard',
+                      'path' => $module_path . '/templates',
+                    ],
+                
+                  ];
+    }
+    
