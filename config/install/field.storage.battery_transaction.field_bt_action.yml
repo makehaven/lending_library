@@ -10,11 +10,21 @@ entity_type: battery_transaction
 type: list_string
 settings:
   allowed_values:
-    withdraw: Withdraw
-    return: Return
-    issue: Issue
-    charge: Charge
-    renew: Renew
+    -
+      value: withdraw
+      label: Withdraw
+    -
+      value: return
+      label: Return
+    -
+      value: issue
+      label: Issue
+    -
+      value: charge
+      label: Charge
+    -
+      value: renew
+      label: Renew
 module: options
 locked: false
 cardinality: 1

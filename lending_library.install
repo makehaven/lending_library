@@ -126,7 +126,4 @@ function lending_library_update_10004() {
       }
     }
   }
-
-  // Clear cache to register the new entity type.
-  drupal_flush_all_caches();
 }
