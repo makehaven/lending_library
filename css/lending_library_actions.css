@@ -1,0 +1,13 @@
+/* Styles for lending library action buttons */
+.lending-library-action-buttons .button,
+.lending-library-action-buttons .dropbutton-wrapper {
+  margin-right: 10px;
+  margin-bottom: 5px;
+  vertical-align: middle;
+  display: inline-block;
+}
+
+.lending-library-action-buttons .button:last-child,
+.lending-library-action-buttons .dropbutton-wrapper:last-child {
+  margin-right: 0;
+}

@@ -53,6 +53,22 @@ lending_library.issue_form:
       node:
         type: entity:node
 
+lending_library.mark_available:
+  path: '/library-item/{node}/mark-available'
+  defaults:
+    _title: 'Mark as Available'
+    _form: '\Drupal\lending_library\Form\MarkAvailableConfirmForm'
+  requirements:
+    _permission: 'administer lending library configuration'
+    node: \d+
+  options:
+    parameters:
+      node:
+        type: entity:node
+
+
+
+
 lending_library.settings:
   path: '/admin/config/makehaven/lending-library'
   defaults:

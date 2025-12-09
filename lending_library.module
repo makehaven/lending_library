@@ -1257,12 +1257,45 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
           }
         }
       }
+      // START: "More actions" dropbutton section.
+      $more_actions_links = [];
+
+      // Always include "Report Issue" if the item is not retired.
       if ($item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_RETIRED) {
-        $url = Url::fromRoute('lending_library.issue_form', ['node' => $library_item_node->id()]);
-        $links['report_issue'] = ['#type' => 'link', '#title' => t('More actions'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--warning', 'lending-library-button']]];
+        $more_actions_links['report_issue'] = [
+          'title' => t('Report Issue'),
+          'url' => Url::fromRoute('lending_library.issue_form', ['node' => $library_item_node->id()]),
+        ];
       }
+
+      // Conditionally add "Mark as Available (On Shelf)" for administrators.
+      if (\Drupal::currentUser()->hasPermission('administer lending library configuration') && $item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
+        $more_actions_links['mark_available'] = [
+          'title' => t('Mark as Available (On Shelf)'),
+          'url' => Url::fromRoute('lending_library.mark_available', ['node' => $library_item_node->id()]),
+          'attributes' => [
+            'class' => ['use-ajax'],
+            'data-dialog-type' => 'modal',
+            'data-dialog-options' => json_encode(['width' => 700]),
+          ],
+        ];
+      }
+
+      // If there are any actions, create a dropbutton.
+      if (!empty($more_actions_links)) {
+        $links['more_actions_dropbutton'] = [
+          '#type' => 'dropbutton',
+          '#links' => $more_actions_links,
+          '#weight' => 200,
+        ];
+      }
+      // END: "More actions" dropbutton section.
     }
+
     if (!empty($links)) {
+      // The rest of the build array remains the same.
+      // The wrapper for lending_library_action-buttons also remains the same.
+
       $build['lending_library_actions'] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['lending-library-action-buttons']],

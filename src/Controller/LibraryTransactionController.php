@@ -17,8 +17,11 @@ use Drupal\lending_library\Service\LendingLibraryManagerInterface;
 class LibraryTransactionController extends ControllerBase {
 
   protected $entityTypeManager;
+
   protected $entityFormBuilder;
+
   protected $currentUser;
+
   protected $lendingLibraryManager;
 
   /**
@@ -48,7 +51,7 @@ class LibraryTransactionController extends ControllerBase {
    */
   public function actionForm(NodeInterface $node, string $action_type) {
     // Corresponds to LENDING_LIBRARY_ITEM_NODE_TYPE in .module
-    if ($node->bundle() !== 'library_item') { 
+    if ($node->bundle() !== 'library_item') {
       throw new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException();
     }
 
@@ -184,6 +187,7 @@ class LibraryTransactionController extends ControllerBase {
       '%title' => $node->label(),
       '@date' => $new_due_date->format('F j, Y'),
     ]));
+
     return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
   }
 
