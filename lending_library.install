@@ -93,9 +93,8 @@ function lending_library_update_10003() {
  */
 function lending_library_update_10004() {
   // Install the new configuration files.
-  $config_installer = \Drupal::service('config.installer');
   $config_path = \Drupal::service('extension.list.module')->getPath('lending_library') . '/config/install';
-  
+
   // List of config files to install in order of dependency.
   $configs_to_install = [
     'eck.eck_entity_type.battery_transaction',
@@ -112,18 +111,17 @@ function lending_library_update_10004() {
 
   $source = new \Drupal\Core\Config\FileStorage($config_path);
   $active_storage = \Drupal::service('config.storage');
-  
+
   foreach ($configs_to_install as $config_name) {
     if (!$active_storage->exists($config_name)) {
       $config_data = $source->read($config_name);
       if ($config_data) {
         $active_storage->write($config_name, $config_data);
-        // We probably need to clear cache or rebuild something for entities to register.
-        // But simply writing to active storage usually requires a config import or a cache clear.
-        // A better way in an update hook is to use the entity manager to create them if possible,
-        // or just rely on the ConfigFactory.
-        \Drupal::configFactory()->getEditable($config_name)->setData($config_data)->save();
       }
     }
   }
+
+  // Clear only the caches that need to know about the new entity definitions.
+  \Drupal::entityTypeManager()->clearCachedDefinitions();
+  \Drupal::service('entity_field.manager')->clearCachedFieldDefinitions();
 }
