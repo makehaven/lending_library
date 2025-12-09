@@ -835,6 +835,12 @@ function lending_library_entity_insert(EntityInterface $entity) {
                 ])
               );
 
+              \Drupal::service('lending_library.manager')->createBatteryTransaction(
+                  $battery,
+                  'withdraw',
+                  $transaction_borrower_uid,
+                  $entity
+              );
 
             }
           }

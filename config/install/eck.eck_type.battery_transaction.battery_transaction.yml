@@ -1,0 +1,8 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_entity_type.battery_transaction
+type: battery_transaction
+name: 'Battery Transaction'
+description: 'Tracks history of battery usage.'

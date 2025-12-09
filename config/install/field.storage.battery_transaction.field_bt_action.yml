@@ -1,0 +1,24 @@
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - options
+id: battery_transaction.field_bt_action
+field_name: field_bt_action
+entity_type: battery_transaction
+type: list_string
+settings:
+  allowed_values:
+    withdraw: Withdraw
+    return: Return
+    issue: Issue
+    charge: Charge
+    renew: Renew
+module: options
+locked: false
+cardinality: 1
+translatable: true
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

@@ -194,6 +194,12 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
         $battery,
         t('Returned independently (battery only) by user @uid.', ['@uid' => $this->currentUser->id()])
       );
+
+      $this->createBatteryTransaction(
+        $battery,
+        'return',
+        $this->currentUser->id()
+      );
     }
   }
 
@@ -549,6 +555,41 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
         $from,
         TRUE
       );
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function createBatteryTransaction(EntityInterface $battery, string $action, ?int $borrower_uid, ?EntityInterface $tool_transaction = NULL) {
+    try {
+      $values = [
+        'type' => 'battery_transaction',
+        'field_bt_battery' => $battery->id(),
+        'field_bt_action' => $action,
+        'uid' => $this->currentUser->id(), // Creator is current user
+        'created' => $this->time->getRequestTime(),
+      ];
+
+      if ($borrower_uid) {
+        $values['field_bt_borrower'] = $borrower_uid;
+      }
+
+      if ($tool_transaction) {
+        $values['field_bt_tool_trans'] = $tool_transaction->id();
+      }
+
+      $transaction = $this->entityTypeManager->getStorage('battery_transaction')->create($values);
+      $transaction->save();
+
+      $this->logger->info('Created battery transaction @id for battery @bid (action: @action).', [
+        '@id' => $transaction->id(),
+        '@bid' => $battery->id(),
+        '@action' => $action,
+      ]);
+    }
+    catch (\Exception $e) {
+      $this->logger->error('Failed to create battery transaction: @message', ['@message' => $e->getMessage()]);
     }
   }
 }

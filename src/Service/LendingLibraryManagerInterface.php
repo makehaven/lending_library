@@ -151,4 +151,18 @@ interface LendingLibraryManagerInterface {
    *   The transaction entity.
    */
   public function sendDamagedEmail(EntityInterface $transaction);
+
+  /**
+   * Creates a battery transaction.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $battery
+   *   The battery entity.
+   * @param string $action
+   *   The action (withdraw, return, charge, etc.).
+   * @param int|null $borrower_uid
+   *   The user ID of the borrower.
+   * @param \Drupal\Core\Entity\EntityInterface|null $tool_transaction
+   *   The related tool transaction, if any.
+   */
+  public function createBatteryTransaction(EntityInterface $battery, string $action, ?int $borrower_uid, ?EntityInterface $tool_transaction = NULL);
 }
