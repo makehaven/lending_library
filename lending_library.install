@@ -125,3 +125,14 @@ function lending_library_update_10004() {
   \Drupal::entityTypeManager()->clearCachedDefinitions();
   \Drupal::service('entity_field.manager')->clearCachedFieldDefinitions();
 }
+
+/**
+ * Ensure battery_transaction entity type schema is installed.
+ */
+function lending_library_update_10005() {
+  $manager = \Drupal::entityDefinitionUpdateManager();
+  $entity_type = \Drupal::entityTypeManager()->getDefinition('battery_transaction');
+  if ($entity_type) {
+    $manager->installEntityType($entity_type);
+  }
+}

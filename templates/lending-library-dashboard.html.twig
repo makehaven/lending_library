@@ -78,14 +78,16 @@
               <tr>
                 <th>Tool</th>
                 <th>Borrower</th>
+                <th>Battery</th>
                 <th>Due</th>
               </tr>
             </thead>
             <tbody>
               {% for item in active_loans %}
                 <tr>
-                  <td><a href="/node/{{ item.tool_id }}">{{ item.tool }}</a></td>
+                  <td><a href="{{ item.transaction_url }}">{{ item.tool }}</a></td>
                   <td>{{ item.borrower }}</td>
+                  <td>{{ item.batteries }}</td>
                   <td>{{ item.due_date }}</td>
                 </tr>
               {% endfor %}

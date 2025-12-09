@@ -179,6 +179,7 @@ class LendingLibraryDashboardController extends ControllerBase {
     $query = $transaction_storage->getAggregateQuery()
       ->accessCheck(FALSE)
       ->condition('type', 'library_transaction')
+      ->condition('field_library_closed', 1, '<>')
       ->aggregate('field_library_amount_due', 'SUM', NULL, $total_due_alias);
     $results = $query->execute();
     $total_owed = $results[0]['total_due'] ?? 0;
@@ -390,14 +391,27 @@ class LendingLibraryDashboardController extends ControllerBase {
         }
       }
 
+      $batteries = [];
+      if ($t->hasField('field_library_borrow_batteries') && !$t->get('field_library_borrow_batteries')->isEmpty()) {
+        $battery_entities = $t->get('field_library_borrow_batteries')->referencedEntities();
+        foreach ($battery_entities as $battery) {
+          $batteries[] = $battery->label();
+        }
+      }
+      $battery_str = implode(', ', $batteries);
+
+      $transaction_url = Url::fromRoute('entity.library_transaction.edit_form', ['library_transaction' => $t->id()])->toString();
+
       $due_date = $t->get('field_library_due_date')->date;
 
       $items[] = [
         'tool' => $tool,
         'tool_id' => $tool_id,
         'borrower' => $borrower,
+        'batteries' => $battery_str,
         'due_date' => $due_date ? $this->dateFormatter->format($due_date->getTimestamp(), 'short') : $this->t('Unknown'),
         'id' => $t->id(),
+        'transaction_url' => $transaction_url,
       ];
     }
     return $items;

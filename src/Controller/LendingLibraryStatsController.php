@@ -355,13 +355,28 @@ class LendingLibraryStatsController extends ControllerBase {
       '#options' => [
         'height' => 320,
       ],
+      // Define the primary Y-axis for Drupal Charts module.
+      '#y_axis' => [
+        'title' => $this->t('Inventory count'),
+      ],
+      // Define the secondary Y-axis for Drupal Charts module.
+      '#secondary_y_axis' => [
+        'title' => $this->t('Inventory value'),
+      ],
       '#raw_options' => [
         'options' => [
+          'interaction' => [
+            'mode' => 'index',
+            'intersect' => FALSE,
+          ],
           'plugins' => [
             'legend' => ['position' => 'bottom'],
           ],
           'scales' => [
             'y' => [
+              'type' => 'linear',
+              'display' => TRUE,
+              'position' => 'left',
               'beginAtZero' => TRUE,
               'title' => ['display' => TRUE, 'text' => $this->t('Inventory count')],
               'ticks' => [
@@ -369,9 +384,11 @@ class LendingLibraryStatsController extends ControllerBase {
               ],
             ],
             'y1' => [
-              'beginAtZero' => TRUE,
+              'type' => 'linear',
+              'display' => TRUE,
               'position' => 'right',
-              'grid' => ['drawOnChartArea' => FALSE],
+              'beginAtZero' => TRUE,
+              'grid' => ['drawOnChartArea' => FALSE], // Only show grid for primary axis
               'title' => ['display' => TRUE, 'text' => $this->t('Inventory value')],
               'ticks' => [
                 'callback' => 'function(value){ return "$" + Number(value).toLocaleString(); }',
@@ -387,6 +404,7 @@ class LendingLibraryStatsController extends ControllerBase {
       '#title' => $this->t('Items'),
       '#data' => $counts,
       '#color' => '#9333ea',
+      '#y_axis' => 'primary', // Explicitly assign to primary y-axis.
       '#options' => [
         'yAxisID' => 'y',
         'borderWidth' => 2,
@@ -400,6 +418,7 @@ class LendingLibraryStatsController extends ControllerBase {
       '#title' => $this->t('Value'),
       '#data' => $values,
       '#color' => '#f97316',
+      '#y_axis' => 'secondary', // Explicitly assign to secondary y-axis.
       '#options' => [
         'yAxisID' => 'y1',
         'borderWidth' => 2,

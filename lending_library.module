@@ -3,6 +3,10 @@
 /**
  * @file
  * Contains lending_library.module.
+ *
+ * IMPORTANT: When running Lando commands, please execute them from the project root directory
+ * (/mnt/extra_storage/makehaven-webdev/dev.makehaven-website/),
+ * not from within this module directory.
  */
 
 use Drupal\Core\Entity\EntityInterface;
