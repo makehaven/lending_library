@@ -16,7 +16,7 @@ use Drupal\Core\Url;
 use Drupal\node\NodeInterface;
 use Drupal\Core\Link;
 use Drupal\user\Entity\User;
-use Drupal\lending_library\Service\LendingLibraryManager;
+use Drupal\lending_library\Service\LendingLibraryManagerInterface;
 
 // --- CONFIGURATION CONSTANTS ---
 define('LENDING_LIBRARY_ITEM_NODE_TYPE', 'library_item');
@@ -61,6 +61,16 @@ define('LENDING_LIBRARY_BATTERY_STATUS_AVAILABLE', 'available');
 define('LENDING_LIBRARY_BATTERY_STATUS_BORROWED', 'borrowed');
 define('LENDING_LIBRARY_BATTERY_STATUS_MISSING', 'missing');
 define('LENDING_LIBRARY_BATTERY_STATUS_RETIRED', 'retired');
+
+/**
+ * Provides easy access to the lending library manager service.
+ *
+ * @return \Drupal\lending_library\Service\LendingLibraryManagerInterface
+ *   The lending library manager.
+ */
+function lending_library_manager() {
+  return \Drupal::service('lending_library.manager');
+}
 
 
 // --- END CONFIGURATION CONSTANTS ---
@@ -166,13 +176,14 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
   $library_item_node = NULL;
   $tool_requires_batteries = FALSE;
   $item_details = NULL;
+  $manager = lending_library_manager();
 
   if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty()) {
     $library_item_node_id = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
     if ($library_item_node_id) {
       $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($library_item_node_id);
       if ($library_item_node instanceof NodeInterface) {
-        $item_details = _lending_library_get_item_details($library_item_node);
+        $item_details = $manager->getItemDetails($library_item_node);
         if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD)->isEmpty()) {
           $tool_requires_batteries = (bool) $library_item_node->get(LENDING_LIBRARY_ITEM_REQUIRES_BATTERIES_FIELD)->value;
         }
@@ -274,7 +285,7 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
               $borrower_uid = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->target_id;
             }
   
-            $bats = _lending_library_load_borrowed_batteries($library_item_node->id(), $borrower_uid);
+            $bats = $manager->loadBorrowedBatteries($library_item_node->id(), $borrower_uid);
             if (!empty($bats)) {
               // Render a small list as a reminder.
               $items = [];
@@ -548,7 +559,8 @@ function _lending_library_transaction_form_validate(&$form, FormStateInterface $
     $library_item_node = \Drupal::entityTypeManager()->getStorage('node')->load($transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id);
   }
   if ($library_item_node instanceof NodeInterface) {
-    $item_details = _lending_library_get_item_details($library_item_node);
+    $manager = lending_library_manager();
+    $item_details = $manager->getItemDetails($library_item_node);
     $current_user_id = \Drupal::currentUser()->id();
     if ($action === LENDING_LIBRARY_ACTION_WITHDRAW) {
       if ($item_details && $item_details['status'] !== LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
@@ -575,6 +587,7 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
     return;
   }
   $action = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->value;
+  $manager = lending_library_manager();
 
   $library_item_node = NULL;
   if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty()) {
@@ -613,11 +626,11 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
             $due_date = $withdraw_transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
             if ($due_date < $now) { // Is overdue.
                 $config = \Drupal::config('lending_library.settings');
-                $late_fee_details = _lending_library_calculate_late_fee($withdraw_transaction, $now);
+                $late_fee_details = $manager->calculateLateFee($withdraw_transaction, $now);
                 $final_late_fee = 0;
 
                 if ($late_fee_details) {
-                    $item_details = _lending_library_get_item_details($library_item_node);
+                    $item_details = $manager->getItemDetails($library_item_node);
                     $replacement_value = $item_details['replacement_value'] ?? 0;
                     $cap_percentage = $config->get('late_fee_cap_percentage');
                     $fee_cap = ($replacement_value * $cap_percentage) / 100;
@@ -643,7 +656,7 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
             // This needs to be a separate check from the late fee check.
             $unreturned_battery_charge = 0;
             if (!$form_state->getValue('lending_library_return_batteries')) {
-                $unreturned_battery_charge = _lending_library_calculate_unreturned_battery_value($withdraw_transaction);
+                $unreturned_battery_charge = $manager->calculateUnreturnedBatteryValue($withdraw_transaction);
             }
 
             if ($unreturned_battery_charge > 0) {
@@ -673,9 +686,9 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
         // If the checkbox exists and is checked, return associated batteries.
         if ($form_state->getValue('lending_library_return_batteries') && $library_item_node instanceof \Drupal\node\NodeInterface) {
-          $bats = _lending_library_load_borrowed_batteries($library_item_node->id(), $borrower_uid);
+          $bats = $manager->loadBorrowedBatteries($library_item_node->id(), $borrower_uid);
           if (!empty($bats)) {
-            _lending_library_return_batteries($bats);
+            $manager->returnBatteries($bats);
             \Drupal::messenger()->addStatus(t('Associated batteries have been marked as returned.'));
           }
         }
@@ -750,13 +763,15 @@ function lending_library_entity_insert(EntityInterface $entity) {
 
   $save_item_node = FALSE;
 
+  $manager = lending_library_manager();
+
   switch ($action) {
 
     // ---------------------------
     // WITHDRAW
     // ---------------------------
     case LENDING_LIBRARY_ACTION_WITHDRAW:
-      $item_details = _lending_library_get_item_details($library_item_node);
+      $item_details = $manager->getItemDetails($library_item_node);
 
       // Failsafe: If the item is being withdrawn but is still marked as
       // borrowed, it means a return was missed. We should close the previous
@@ -995,6 +1010,7 @@ function lending_library_cron() {
 
   $now = new DrupalDateTime('now');
   $config = \Drupal::config('lending_library.settings');
+  $manager = lending_library_manager();
 
   // Get all fee settings.
   $overdue_charge_days = $config->get('overdue_charge_days') ?: 30;
@@ -1070,7 +1086,7 @@ function lending_library_cron() {
       }
       // Otherwise, if daily late fees are enabled, process them.
       elseif ($daily_late_fee > 0) {
-        $item_details = _lending_library_get_item_details($item);
+        $item_details = $manager->getItemDetails($item);
         $replacement_value = $item_details['replacement_value'] ?? 0;
 
         if ($replacement_value > 0) {
@@ -1175,7 +1191,8 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
   if ($entity->getEntityTypeId() === 'node' && $entity->bundle() === LENDING_LIBRARY_ITEM_NODE_TYPE && $view_mode === 'full') {
     $current_user = \Drupal::currentUser();
     $library_item_node = $entity;
-    $item_details = _lending_library_get_item_details($library_item_node);
+    $manager = lending_library_manager();
+    $item_details = $manager->getItemDetails($library_item_node);
 
     if ($item_details) {
       $status_class = 'status-' . preg_replace('/[^a-z0-9\-]+/', '-', strtolower($item_details['status']));
@@ -1189,7 +1206,7 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
             $borrower_link = Link::fromTextAndUrl($borrower_account->getDisplayName(), $borrower_account->toUrl())->toString();
             $status_markup .= ' ' . t('by @username', ['@username' => $borrower_link]);
 
-            $loan_details = _lending_library_get_current_loan_details($library_item_node);
+            $loan_details = $manager->getCurrentLoanDetails($library_item_node);
             if ($loan_details) {
               $date_formatter = \Drupal::service('date.formatter');
               if (!empty($loan_details['borrow_date'])) {
@@ -1226,7 +1243,7 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
         // Add a "Renew" button.
         $config = \Drupal::config('lending_library.settings');
         $max_renewals = $config->get('max_renewal_count');
-        $loan_details = _lending_library_get_current_loan_details($library_item_node);
+        $loan_details = $manager->getCurrentLoanDetails($library_item_node);
         $now = new DrupalDateTime();
 
         // Get the renewal count from the latest transaction.

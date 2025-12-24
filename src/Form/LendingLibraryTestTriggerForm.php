@@ -128,9 +128,6 @@ class LendingLibraryTestTriggerForm extends FormBase {
     $email_key = $form_state->getValue('email_key');
     $recipient_email = $form_state->getValue('recipient_email');
 
-    // Include the module file to ensure helper functions are available.
-    module_load_include('module', 'lending_library');
-
     // Get a random tool to make the test data more realistic.
     $query = $this->entityTypeManager->getStorage('node')->getQuery()
       ->condition('type', 'library_item')
