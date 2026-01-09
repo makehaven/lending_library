@@ -1,7 +1,7 @@
 name: Lending Library
 type: module
 description: 'Manages tool lending, transactions, and associated item statuses.'
-package: Custom
+package: Makerspace
 core_version_requirement: ^10 || ^11
 dependencies:
   - drupal:eck
@@ -19,3 +19,4 @@ dependencies:
   - drupal:field_group
   - drupal:charts
   - drupal:charts_chartjs
+configure: lending_library.settings
