@@ -385,6 +385,12 @@ if (!empty($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'])
     $form['actions']['submit']['#submit'][] = '_lending_library_check_for_damage_charge_submit';
   }
 
+  // Add a duplicate submit button at the bottom for better mobile UX (Gin theme).
+  if ($current_action === LENDING_LIBRARY_ACTION_WITHDRAW && isset($form['actions']['submit'])) {
+    $form['submit_bottom'] = $form['actions']['submit'];
+    $form['submit_bottom']['#weight'] = 100;
+  }
+
   if ($current_action === LENDING_LIBRARY_ACTION_WITHDRAW) {
     $due_date_display = t('N/A - Due date will be calculated upon withdrawal.');
     if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
