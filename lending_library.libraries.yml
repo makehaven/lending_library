@@ -10,3 +10,8 @@ lending_library.battery_limit:
   dependencies:
     - core/drupal
     - core/once
+
+lending_library.camera_upload:
+  css:
+    theme:
+      css/camera_upload.css: {}
