@@ -86,7 +86,7 @@ class ToolStatusUpdater {
       case self::LENDING_LIBRARY_ACTION_WITHDRAW:
         $item_details = $this->lendingLibraryManager->getItemDetails($library_item_node);
 
-        if ($item_details['status'] === self::LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && $item_details['borrower_uid'] != $transaction_borrower_uid) {
+        if ($item_details['status'] === self::LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && (int) $item_details['borrower_uid'] !== (int) $transaction_borrower_uid) {
           $storage = $this->entityTypeManager->getStorage('library_transaction');
           $return_values = [
             'type' => 'library_transaction',
@@ -108,7 +108,7 @@ class ToolStatusUpdater {
           if ($library_item_node->hasField(self::LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$library_item_node->get(self::LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
             $waitlist_items = $library_item_node->get(self::LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
             foreach ($waitlist_items as $delta => $item) {
-              if (isset($item['target_id']) && $item['target_id'] == $transaction_borrower_uid) {
+              if (isset($item['target_id']) && (int) $item['target_id'] === (int) $transaction_borrower_uid) {
                 $library_item_node->get(self::LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->removeItem($delta);
                 break;
               }

@@ -19,7 +19,7 @@ lending_library.return_form:
     _controller: '\Drupal\lending_library\Controller\LibraryTransactionController::actionForm'
     action_type: 'return'
   requirements:
-    _permission: 'create library_transaction entities' 
+    _lending_library_return_access: 'TRUE'
     node: \d+
   options:
     parameters:

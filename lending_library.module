@@ -340,7 +340,7 @@ function _lending_library_transaction_form_logic(&$form, FormStateInterface $for
           break;
         case LENDING_LIBRARY_ITEM_STATUS_BORROWED:
         case LENDING_LIBRARY_ITEM_STATUS_MISSING:
-          if ($item_details['borrower_uid'] == $current_user->id()) {
+          if ((int) $item_details['borrower_uid'] === (int) $current_user->id()) {
             $allowed_actions[LENDING_LIBRARY_ACTION_RETURN] = TRUE;
           }
           break;
@@ -577,7 +577,7 @@ function _lending_library_transaction_form_validate(&$form, FormStateInterface $
       if ($item_details && !in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_MISSING])) {
         $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, t('This item cannot be returned. It is not currently marked as borrowed or missing.'));
       }
-      elseif ($item_details && $item_details['borrower_uid'] != $current_user_id) {
+      elseif ($item_details && (int) $item_details['borrower_uid'] !== (int) $current_user_id) {
         $form_state->setErrorByName(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD, t('You are not the current borrower of this item.'));
       }
     }
@@ -629,6 +629,9 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
         $t_ids = $t_query->execute();
         if (!empty($t_ids)) {
             $withdraw_transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load(reset($t_ids));
+            if (!$withdraw_transaction) {
+              break; // Transaction was deleted, skip late fee processing.
+            }
             $due_date = $withdraw_transaction->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->date;
             if ($due_date < $now) { // Is overdue.
                 $config = \Drupal::config('lending_library.settings');
@@ -638,7 +641,7 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
                 if ($late_fee_details) {
                     $item_details = $manager->getItemDetails($library_item_node);
                     $replacement_value = $item_details['replacement_value'] ?? 0;
-                    $cap_percentage = $config->get('late_fee_cap_percentage');
+                    $cap_percentage = $config->get('late_fee_cap_percentage') ?: 50;
                     $fee_cap = ($replacement_value * $cap_percentage) / 100;
                     $final_late_fee = min($late_fee_details['late_fee'], $fee_cap);
                 }
@@ -782,19 +785,23 @@ function lending_library_entity_insert(EntityInterface $entity) {
       // Failsafe: If the item is being withdrawn but is still marked as
       // borrowed, it means a return was missed. We should close the previous
       // loan by creating a programmatic return transaction.
-      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && $item_details['borrower_uid'] != $transaction_borrower_uid) {
+      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED && $item_details['borrower_uid'] && (int) $item_details['borrower_uid'] !== (int) $transaction_borrower_uid) {
         $storage = \Drupal::entityTypeManager()->getStorage('library_transaction');
+        $previous_borrower_uid = $item_details['borrower_uid'];
         $return_values = [
           'type' => 'library_transaction',
           'field_library_item' => $library_item_node->id(),
           'field_library_action' => LENDING_LIBRARY_ACTION_RETURN,
-          'field_library_borrower' => $item_details['borrower_uid'],
-          'uid' => $item_details['borrower_uid'], // Or system user (0)?
+          'field_library_borrower' => $previous_borrower_uid,
+          'uid' => $previous_borrower_uid,
           'field_library_return_date' => date('Y-m-d\TH:i:s'),
           'field_library_inspection_notes' => 'Automatic return processed due to new withdrawal.',
         ];
         $programmatic_return = $storage->create($return_values);
         $programmatic_return->save();
+
+        // Notify the previous borrower that their loan was auto-closed.
+        $manager->sendEmailByKey($programmatic_return, 'auto_return_notification', []);
 
         // Reload the node to get the updated status.
         \Drupal::entityTypeManager()->getStorage('node')->resetCache([$library_item_node->id()]);
@@ -807,7 +814,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
         if ($library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) && !$library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty()) {
           $waitlist_items = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
           foreach ($waitlist_items as $delta => $item) {
-            if (isset($item['target_id']) && $item['target_id'] == $transaction_borrower_uid) {
+            if (isset($item['target_id']) && (int) $item['target_id'] === (int) $transaction_borrower_uid) {
               $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->removeItem($delta);
               break;
             }
@@ -835,7 +842,7 @@ function lending_library_entity_insert(EntityInterface $entity) {
               if ($battery->hasField(LENDING_LIBRARY_BATTERY_STATUS_FIELD) && $battery->get(LENDING_LIBRARY_BATTERY_STATUS_FIELD)->value === LENDING_LIBRARY_BATTERY_STATUS_BORROWED) {
                  if ($battery->hasField(LENDING_LIBRARY_BATTERY_BORROWER_FIELD) && !$battery->get(LENDING_LIBRARY_BATTERY_BORROWER_FIELD)->isEmpty()) {
                    $prev_uid = $battery->get(LENDING_LIBRARY_BATTERY_BORROWER_FIELD)->target_id;
-                   if ($prev_uid != $transaction_borrower_uid) {
+                   if ((int) $prev_uid !== (int) $transaction_borrower_uid) {
                      $previous_borrower_msg = " (Taken from user $prev_uid)";
                    }
                  }
@@ -1232,17 +1239,26 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
       ];
     }
 
-    if (!$current_user->hasRole('borrower')) {
+    // Determine if user can perform lending actions.
+    // Users with 'borrower' role can withdraw, renew, and get in line.
+    // Current borrowers can ALWAYS return items they have, even without borrower role.
+    $has_borrower_role = $current_user->hasRole('borrower');
+    $is_current_borrower = $item_details && (int) $item_details['borrower_uid'] === (int) $current_user->id();
+
+    // If user has no borrower role AND is not the current borrower, skip action buttons.
+    if (!$has_borrower_role && !$is_current_borrower) {
       return;
     }
 
     $links = [];
     if ($item_details) {
-      if ($item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
+      // Withdraw button - only for users with borrower role.
+      if ($has_borrower_role && $item_details['status'] === LENDING_LIBRARY_ITEM_STATUS_AVAILABLE) {
         $url = Url::fromRoute('lending_library.withdraw_form', ['node' => $library_item_node->id()]);
         $links['withdraw'] = ['#type' => 'link', '#title' => t('Withdraw This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
       }
-      if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $item_details['borrower_uid'] == $current_user->id()) {
+      // Return button - shown to current borrower regardless of role.
+      if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $is_current_borrower) {
         $url = Url::fromRoute('lending_library.return_form', ['node' => $library_item_node->id()]);
         $links['return'] = ['#type' => 'link', '#title' => t('Return This Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'button--primary', 'lending-library-button']]];
 
@@ -1263,31 +1279,33 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
         $renew_count = 0;
         if (!empty($t_ids)) {
           $transaction = \Drupal::entityTypeManager()->getStorage('library_transaction')->load(reset($t_ids));
-          if ($transaction->hasField(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD) && !$transaction->get(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD)->isEmpty()) {
+          if ($transaction && $transaction->hasField(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD) && !$transaction->get(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD)->isEmpty()) {
             $renew_count = $transaction->get(LENDING_LIBRARY_TRANSACTION_RENEW_COUNT_FIELD)->value;
           }
         }
 
-        if ($loan_details['due_date'] > $now &&
+        // Renew requires borrower role (for the permission to create transactions).
+        if ($has_borrower_role &&
+            $loan_details && !empty($loan_details['due_date']) &&
+            $loan_details['due_date'] > $now &&
             ($max_renewals == 0 || $renew_count < $max_renewals) &&
             (!$library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD) || $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->isEmpty())) {
           $url = Url::fromRoute('lending_library.renew', ['node' => $library_item_node->id()]);
           $links['renew'] = ['#type' => 'link', '#title' => t('Renew Item'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
         }
       }
-      if (in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_REPAIR, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
+      // Waitlist buttons - only for users with borrower role (not just current borrower).
+      if ($has_borrower_role && in_array($item_details['status'], [LENDING_LIBRARY_ITEM_STATUS_BORROWED, LENDING_LIBRARY_ITEM_STATUS_REPAIR, LENDING_LIBRARY_ITEM_STATUS_MISSING]) && $library_item_node->hasField(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)) {
         $waitlist_users = $library_item_node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->getValue();
         $user_ids = array_column($waitlist_users, 'target_id');
         if (in_array($current_user->id(), $user_ids)) {
           $url = Url::fromRoute('lending_library.waitlist_remove', ['node' => $library_item_node->id()]);
           $links['waitlist'] = ['#type' => 'link', '#title' => t('Leave Waitlist'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
         }
-        else {
+        elseif (!$is_current_borrower) {
           // Do not show "Get in Line" to the current borrower of the item.
-          if ($item_details['borrower_uid'] !== $current_user->id()) {
-            $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
-            $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
-          }
+          $url = Url::fromRoute('lending_library.waitlist_add', ['node' => $library_item_node->id()]);
+          $links['waitlist'] = ['#type' => 'link', '#title' => t('Get in Line'), '#url' => $url, '#attributes' => ['class' => ['button', 'lending-library-button']]];
         }
       }
       // START: "More actions" dropbutton section.
@@ -1326,9 +1344,6 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
     }
 
     if (!empty($links)) {
-      // The rest of the build array remains the same.
-      // The wrapper for lending_library_action-buttons also remains the same.
-
       $build['lending_library_actions'] = [
         '#type' => 'container',
         '#attributes' => ['class' => ['lending-library-action-buttons']],
@@ -1339,6 +1354,11 @@ function lending_library_entity_view(array &$build, EntityInterface $entity, \Dr
       ];
       $build['#attached']['library'][] = 'lending_library/lending_library.actions';
     }
+
+    // Add cache contexts and tags so buttons update correctly per user and on node changes.
+    $build['#cache']['contexts'][] = 'user';
+    $build['#cache']['contexts'][] = 'user.roles';
+    $build['#cache']['tags'][] = 'node:' . $library_item_node->id();
   }
 }
 
@@ -1553,6 +1573,11 @@ function lending_library_mail($key, &$message, $params) {
     case 'renewal_confirmation':
       $subject = $cfg->get('email_renewal_confirmation_subject') ?: 'Tool Renewal Confirmation';
       $body_template = $cfg->get('email_renewal_confirmation_body') ?: "Hello [borrower_name],\n\nYou have successfully renewed '[tool_name]'. It is now due on [due_date].";
+      break;
+
+    case 'auto_return_notification':
+      $subject = $cfg->get('email_auto_return_subject') ?: 'Your borrowed tool has been automatically returned';
+      $body_template = $cfg->get('email_auto_return_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' that you had borrowed has been automatically marked as returned because another member needed to check it out.\n\nIf you still have this tool in your possession, please contact staff immediately.";
       break;
   }
 

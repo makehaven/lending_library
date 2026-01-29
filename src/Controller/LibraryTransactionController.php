@@ -110,7 +110,7 @@ class LibraryTransactionController extends ControllerBase {
 
     $item_details = $this->lendingLibraryManager->getItemDetails($node);
 
-    if (empty($item_details) || $item_details['status'] !== 'borrowed' || $item_details['borrower_uid'] != $this->currentUser()->id()) {
+    if (empty($item_details) || $item_details['status'] !== 'borrowed' || (int) $item_details['borrower_uid'] !== (int) $this->currentUser()->id()) {
       $this->messenger()->addError($this->t('You cannot renew this item.'));
       return $this->redirect('entity.node.canonical', ['node' => $node->id()]);
     }

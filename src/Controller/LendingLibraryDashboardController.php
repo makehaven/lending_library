@@ -237,13 +237,14 @@ class LendingLibraryDashboardController extends ControllerBase {
     $logs = [];
 
     foreach ($results as $row) {
-      $variables = unserialize($row->variables);
+      // Use allowed_classes: false to prevent object instantiation from untrusted data.
+      $variables = @unserialize($row->variables, ['allowed_classes' => FALSE]);
       $message = $row->message;
       if (is_array($variables)) {
         $message = strtr($message, $variables);
       }
       $logs[] = [
-        'message' => strip_tags($message), // Simple cleanup
+        'message' => strip_tags($message),
         'time' => $this->dateFormatter->format($row->timestamp, 'short'),
         'severity' => $row->severity,
       ];

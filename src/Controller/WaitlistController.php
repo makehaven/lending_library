@@ -39,7 +39,7 @@ class WaitlistController extends ControllerBase {
       $current_user_id = $this->currentUser()->id();
 
       foreach ($waitlist_users as $delta => $item) {
-        if ($item['target_id'] == $current_user_id) {
+        if ((int) $item['target_id'] === (int) $current_user_id) {
           $node->get(LENDING_LIBRARY_ITEM_WAITLIST_FIELD)->removeItem($delta);
           $node->save();
           $this->messenger()->addStatus($this->t('You have been removed from the waitlist for %title.', ['%title' => $node->label()]));

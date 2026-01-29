@@ -71,7 +71,7 @@ class BatteryReturnConfirmForm extends ConfirmFormBase {
         $borrowed_batteries_items = $transaction->get('field_library_borrow_batteries')->getValue();
         $new_items = [];
         foreach ($borrowed_batteries_items as $item) {
-          if ($item['target_id'] != $this->battery->id()) {
+          if ((int) $item['target_id'] !== (int) $this->battery->id()) {
             $new_items[] = $item;
           }
         }

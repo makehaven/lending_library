@@ -1,4 +1,10 @@
 services:
+  lending_library.return_access_check:
+    class: Drupal\lending_library\Access\ReturnAccessCheck
+    arguments: ['@lending_library.manager']
+    tags:
+      - { name: access_check, applies_to: _lending_library_return_access }
+
   lending_library.tool_status_updater:
     class: Drupal\lending_library\Service\ToolStatusUpdater
     arguments: ['@entity_type.manager', '@logger.factory', '@current_user', '@datetime.time', '@lending_library.manager']
