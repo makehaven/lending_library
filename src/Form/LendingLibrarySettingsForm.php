@@ -73,6 +73,87 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#min' => 0,
     ];
 
+    $form['premium_settings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Premium Tool Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['premium_settings']['premium_system_enabled'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable Premium Tool System'),
+      '#description' => $this->t('If enabled, tools meeting the criteria below will be marked as Premium, displaying a badge and potentially enforcing fees.'),
+      '#default_value' => $config->get('premium_system_enabled'),
+    ];
+
+    $form['premium_settings']['premium_payment_enabled'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable Automatic Payment Collection'),
+      '#description' => $this->t('If enabled, users will be charged the Premium Borrow Fee automatically upon withdrawal (unless they have an active pass). Requires Stripe integration.'),
+      '#default_value' => $config->get('premium_payment_enabled'),
+      '#states' => [
+        'visible' => [
+          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['premium_settings']['premium_definition_battery'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Battery Tools are Premium'),
+      '#description' => $this->t('If checked, any tool that uses a battery is considered Premium.'),
+      '#default_value' => $config->get('premium_definition_battery') !== NULL ? $config->get('premium_definition_battery') : TRUE,
+      '#states' => [
+        'visible' => [
+          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['premium_settings']['premium_definition_value_threshold'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Premium Value Threshold'),
+      '#description' => $this->t('Items with a replacement value equal to or greater than this amount are considered Premium. Set to 0 to disable value-based premium status.'),
+      '#default_value' => $config->get('premium_definition_value_threshold') ?: 150,
+      '#min' => 0,
+      '#field_prefix' => '$',
+      '#states' => [
+        'visible' => [
+          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['premium_settings']['premium_fee_amount'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Premium Borrow Fee'),
+      '#description' => $this->t('The fee charged per borrow for a Premium tool.'),
+      '#default_value' => $config->get('premium_fee_amount') ?: 10.00,
+      '#min' => 0,
+      '#step' => '0.01',
+      '#field_prefix' => '$',
+      '#states' => [
+        'visible' => [
+          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['premium_settings']['premium_pass_price'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Annual Pass Price'),
+      '#description' => $this->t('The cost of an annual Lending Library Pass. Currently for reference only; pass purchase functionality is not yet implemented.'),
+      '#default_value' => $config->get('premium_pass_price') ?: 60.00,
+      '#min' => 0,
+      '#step' => '0.01',
+      '#field_prefix' => '$',
+      '#states' => [
+        'visible' => [
+          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
     $form['waitlist_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Waitlist Settings'),
@@ -775,6 +856,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'stripe_weekly_charge_enabled',
       'stripe_effective_date',
       'stripe_webhook_secret',
+      'premium_system_enabled',
+      'premium_payment_enabled',
+      'premium_definition_battery',
+      'premium_definition_value_threshold',
+      'premium_fee_amount',
+      'premium_pass_price',
     ];
 
     foreach ($keys_to_save as $key) {

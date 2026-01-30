@@ -165,4 +165,15 @@ interface LendingLibraryManagerInterface {
    *   The related tool transaction, if any.
    */
   public function createBatteryTransaction(EntityInterface $battery, string $action, ?int $borrower_uid, ?EntityInterface $tool_transaction = NULL);
+
+  /**
+   * Checks if a library item is considered "Premium" based on current config.
+   *
+   * @param \Drupal\node\NodeInterface $library_item_node
+   *   The library item node.
+   *
+   * @return bool
+   *   TRUE if the item is premium, FALSE otherwise.
+   */
+  public function isPremiumItem(NodeInterface $library_item_node);
 }

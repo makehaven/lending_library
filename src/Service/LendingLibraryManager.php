@@ -592,4 +592,50 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
       $this->logger->error('Failed to create battery transaction: @message', ['@message' => $e->getMessage()]);
     }
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isPremiumItem(NodeInterface $library_item_node) {
+    if ($library_item_node->bundle() !== self::ITEM_NODE_TYPE) {
+      return FALSE;
+    }
+
+    $config = $this->configFactory->get('lending_library.settings');
+
+    // If premium system is disabled, no items are premium.
+    if (!$config->get('premium_system_enabled')) {
+      return FALSE;
+    }
+
+    // Check Battery Criteria
+    $battery_is_premium = $config->get('premium_definition_battery');
+    // Default to TRUE if config is missing to match the safe "more restrictive" fallback,
+    // or FALSE if you prefer to be permissive. Given the user's request, let's trust the explicit config or default from install.
+    // However, if config is null, it evaluates to false-ish usually.
+    // Let's use the same defaults as the form/install.
+    if ($battery_is_premium === NULL) $battery_is_premium = TRUE;
+
+    if ($battery_is_premium) {
+      if ($library_item_node->hasField('field_library_item_uses_battery') && !$library_item_node->get('field_library_item_uses_battery')->isEmpty()) {
+        if ($library_item_node->get('field_library_item_uses_battery')->value == 1) {
+          return TRUE;
+        }
+      }
+    }
+
+    // Check Value Criteria
+    $value_threshold = $config->get('premium_definition_value_threshold');
+    if ($value_threshold === NULL) $value_threshold = 150;
+
+    if ($value_threshold > 0) {
+      $item_details = $this->getItemDetails($library_item_node);
+      $value = $item_details['replacement_value'] ?? 0;
+      if ($value >= $value_threshold) {
+        return TRUE;
+      }
+    }
+
+    return FALSE;
+  }
 }

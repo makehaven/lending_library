@@ -271,11 +271,13 @@ class LendingLibraryStripe implements LendingLibraryStripeInterface {
    *   The transaction entity.
    * @param array $chargeResult
    *   The result from createCharge().
+   * @param string $chargeType
+   *   The type of charge: 'late_fee', 'premium_fee', 'damage', 'replacement'.
    *
    * @return bool
    *   TRUE if transaction was updated successfully.
    */
-  public function updateTransactionWithChargeResult(EntityInterface $transaction, array $chargeResult): bool {
+  public function updateTransactionWithChargeResult(EntityInterface $transaction, array $chargeResult, string $chargeType = 'late_fee'): bool {
     $updated = FALSE;
 
     if ($transaction->hasField('field_stripe_payment_intent_id') && !empty($chargeResult['payment_intent_id'])) {
@@ -298,10 +300,18 @@ class LendingLibraryStripe implements LendingLibraryStripeInterface {
       $updated = TRUE;
     }
 
-    // Update the general charges_status field.
+    // Update the general charges_status field based on charge type.
     if ($transaction->hasField('field_library_charges_status')) {
       if ($chargeResult['success'] || $chargeResult['status'] === 'succeeded') {
-        $transaction->set('field_library_charges_status', 'late_paid');
+        // Map charge type to the appropriate paid status.
+        $paid_status_map = [
+          'late_fee' => 'late_paid',
+          'premium_fee' => 'premium_paid',
+          'damage' => 'damage_paid',
+          'replacement' => 'replacement_paid',
+        ];
+        $paid_status = $paid_status_map[$chargeType] ?? 'late_paid';
+        $transaction->set('field_library_charges_status', $paid_status);
       }
       elseif (!$chargeResult['success']) {
         $transaction->set('field_library_charges_status', 'payment_error');

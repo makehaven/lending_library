@@ -136,3 +136,141 @@ function lending_library_update_10005() {
     $manager->installEntityType($entity_type);
   }
 }
+
+/**
+ * Set default values for Premium Tool settings.
+ */
+function lending_library_update_10006() {
+  $config = \Drupal::configFactory()->getEditable('lending_library.settings');
+  // Remove old credit settings if they exist (cleanup from previous dev cycles).
+  $config->clear('enable_credit_system');
+  $config->clear('credit_initial_amount');
+  $config->clear('credit_max_accumulated');
+  $config->clear('credit_issuance_frequency_months');
+  $config->clear('credit_issuance_amount');
+
+  // Set new Premium defaults.
+  $defaults = [
+    'premium_system_enabled' => false,
+    'premium_payment_enabled' => false,
+    'premium_definition_battery' => true,
+    'premium_definition_value_threshold' => 150,
+    'premium_fee_amount' => 10.00,
+    'premium_pass_price' => 60.00,
+  ];
+  foreach ($defaults as $k => $v) {
+    if ($config->get($k) === NULL) {
+      $config->set($k, $v);
+    }
+  }
+  $config->save();
+}
+
+/**
+ * Add Library Subscription fields to User entity.
+ */
+function lending_library_update_10007() {
+  $field_storage_manager = \Drupal::entityTypeManager()->getStorage('field_storage_config');
+  $field_manager = \Drupal::entityTypeManager()->getStorage('field_config');
+
+  // field_library_pass_active (Boolean)
+  if (!$field_storage_manager->load('user.field_library_pass_active')) {
+    $field_storage_definition = $field_storage_manager->create([
+      'field_name' => 'field_library_pass_active',
+      'entity_type' => 'user',
+      'type' => 'boolean',
+      'settings' => [],
+      'cardinality' => 1,
+    ]);
+    $field_storage_definition->save();
+  }
+
+  if (!$field_manager->load('user.user.field_library_pass_active')) {
+    $field_definition = $field_manager->create([
+      'field_name' => 'field_library_pass_active',
+      'entity_type' => 'user',
+      'bundle' => 'user',
+      'label' => 'Lending Library Pass Active',
+      'description' => 'Indicates if the user has an active lending library subscription.',
+      'required' => FALSE,
+      'default_value' => [['value' => 0]],
+      'settings' => [
+        'on_label' => 'Active',
+        'off_label' => 'Inactive',
+      ],
+    ]);
+    $field_definition->save();
+  }
+
+  // field_library_pass_expiry (Date)
+  if (!$field_storage_manager->load('user.field_library_pass_expiry')) {
+    $field_storage_definition = $field_storage_manager->create([
+      'field_name' => 'field_library_pass_expiry',
+      'entity_type' => 'user',
+      'type' => 'datetime',
+      'settings' => ['datetime_type' => 'date'],
+      'cardinality' => 1,
+    ]);
+    $field_storage_definition->save();
+  }
+
+  if (!$field_manager->load('user.user.field_library_pass_expiry')) {
+    $field_definition = $field_manager->create([
+      'field_name' => 'field_library_pass_expiry',
+      'entity_type' => 'user',
+      'bundle' => 'user',
+      'label' => 'Lending Library Pass Expiry',
+      'description' => 'The date the library pass expires.',
+      'required' => FALSE,
+      'translatable' => FALSE,
+      'default_value' => [],
+      'settings' => [],
+    ]);
+    $field_definition->save();
+  }
+}
+
+/**
+ * Add premium fee status values to field_library_charges_status.
+ */
+function lending_library_update_10008() {
+  $field_storage = \Drupal::entityTypeManager()
+    ->getStorage('field_storage_config')
+    ->load('library_transaction.field_library_charges_status');
+
+  if (!$field_storage) {
+    return t('Field storage not found.');
+  }
+
+  $settings = $field_storage->get('settings');
+  $allowed_values = $settings['allowed_values'] ?? [];
+
+  // Check if premium values already exist.
+  $existing_keys = array_column($allowed_values, 'value');
+  $added = [];
+
+  if (!in_array('premium_pending', $existing_keys)) {
+    $allowed_values[] = [
+      'value' => 'premium_pending',
+      'label' => 'Premium fee pending',
+    ];
+    $added[] = 'premium_pending';
+  }
+
+  if (!in_array('premium_paid', $existing_keys)) {
+    $allowed_values[] = [
+      'value' => 'premium_paid',
+      'label' => 'Premium fee paid',
+    ];
+    $added[] = 'premium_paid';
+  }
+
+  if (!empty($added)) {
+    $settings['allowed_values'] = $allowed_values;
+    $field_storage->set('settings', $settings);
+    $field_storage->save();
+    return t('Added status values: @values', ['@values' => implode(', ', $added)]);
+  }
+
+  return t('Premium status values already exist.');
+}

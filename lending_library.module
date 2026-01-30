@@ -13,10 +13,37 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Datetime\DrupalDateTime;
 use Drupal\Core\Url;
-use Drupal\node\NodeInterface;
-use Drupal\Core\Link;
 use Drupal\user\Entity\User;
+use Drupal\Core\Render\Element;
 use Drupal\lending_library\Service\LendingLibraryManagerInterface;
+
+/**
+ * Implements hook_node_view().
+ */
+function lending_library_node_view(array &$build, \Drupal\node\NodeInterface $node, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
+  if ($node->bundle() === 'library_item' && $view_mode === 'full') {
+    $config = \Drupal::config('lending_library.settings');
+    // Check if Premium System is enabled.
+    if (!$config->get('premium_system_enabled')) {
+      return;
+    }
+
+    /** @var \Drupal\lending_library\Service\LendingLibraryManagerInterface $manager */
+    $manager = \Drupal::service('lending_library.manager');
+    if ($manager->isPremiumItem($node)) {
+      $fee = $config->get('premium_fee_amount') ?: 10.00;
+      
+      $build['premium_badge'] = [
+        '#type' => 'markup',
+        '#markup' => '<div class="lending-library-premium-badge" style="background-color: #ffd700; color: #000; padding: 5px 10px; display: inline-block; font-weight: bold; margin-bottom: 10px; border-radius: 4px;">
+          <span class="premium-label">⭐ PREMIUM TOOL</span>
+          <span class="premium-cost">($' . number_format($fee, 2) . ' fee)</span>
+        </div>',
+        '#weight' => -100, // Display at the top
+      ];
+    }
+  }
+}
 
 // --- CONFIGURATION CONSTANTS ---
 define('LENDING_LIBRARY_ITEM_NODE_TYPE', 'library_item');
@@ -625,6 +652,86 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
   switch ($action) {
     case LENDING_LIBRARY_ACTION_WITHDRAW:
+      // --- PREMIUM FEE LOGIC ---
+      $config = \Drupal::config('lending_library.settings');
+      if ($config->get('premium_system_enabled') && $config->get('premium_payment_enabled')) {
+        $manager = lending_library_manager();
+        if ($library_item_node && $manager->isPremiumItem($library_item_node)) {
+          $borrower_uid = $transaction_entity->getOwnerId();
+          $borrower = User::load($borrower_uid);
+          
+          // Check for Pass.
+          $has_pass = FALSE;
+          if ($borrower) {
+            // Check active boolean.
+            if ($borrower->hasField('field_library_pass_active') && $borrower->get('field_library_pass_active')->value) {
+              $has_pass = TRUE;
+            }
+            // Check expiry date (expiry date is the last valid day, so use >=).
+            if (!$has_pass && $borrower->hasField('field_library_pass_expiry') && !$borrower->get('field_library_pass_expiry')->isEmpty()) {
+              $expiry = $borrower->get('field_library_pass_expiry')->date;
+              if ($expiry && $expiry >= new DrupalDateTime('today')) {
+                $has_pass = TRUE;
+              }
+            }
+          }
+
+          if (!$has_pass) {
+            // Apply Charge.
+            $fee = $config->get('premium_fee_amount') ?: 10.00;
+            $stripe_service = \Drupal::service('lending_library.stripe');
+
+            // Ensure we have a valid borrower before proceeding with payment.
+            if (!$borrower) {
+              \Drupal::messenger()->addError(t('Unable to process premium tool checkout. Please contact staff.'));
+              return;
+            }
+
+            if ($stripe_service->isEnabled() && $stripe_service->hasStripeCustomer($borrower)) {
+              // Set fee on transaction before charging (needed for Stripe metadata).
+              $transaction_entity->set('field_library_amount_due', $fee);
+              $transaction_entity->set('field_library_charges_status', 'premium_pending');
+              $transaction_entity->save();
+
+              $description = t('Premium Tool Fee: @tool', ['@tool' => $tool_name]);
+              $charge_result = $stripe_service->createCharge(
+                $borrower,
+                $fee,
+                (string) $description,
+                $transaction_entity,
+                'premium_fee'
+              );
+
+              $stripe_service->updateTransactionWithChargeResult($transaction_entity, $charge_result, 'premium_fee');
+
+              if ($charge_result['success']) {
+                \Drupal::messenger()->addStatus(t('Premium Fee of $@amount charged to your account.', ['@amount' => number_format($fee, 2)]));
+              }
+              else {
+                // Payment failed - block checkout.
+                \Drupal::messenger()->addError(t('Payment failed: @error. Please update your payment method before borrowing premium tools.', [
+                  '@error' => $charge_result['error'] ?? 'Unknown error',
+                ]));
+                $transaction_entity->delete();
+                $form_state->setRedirectUrl(Url::fromRoute('mh_stripe.portal_self', ['user' => $borrower->id()]));
+                return;
+              }
+            }
+            else {
+              // Stripe not enabled or user has no payment method - block checkout.
+              \Drupal::messenger()->addError(t('Premium tools require a payment method on file. Please add one before borrowing.'));
+              $form_state->setRedirectUrl(Url::fromRoute('mh_stripe.portal_self', ['user' => $borrower->id()]));
+              return;
+            }
+          }
+          else {
+            // Has pass.
+            \Drupal::messenger()->addStatus(t('Premium Fee waived (Active Library Pass).'));
+          }
+        }
+      }
+      // --- END PREMIUM FEE LOGIC ---
+
       \Drupal::messenger()->addStatus(t('@tool_name has been successfully withdrawn. Please remember to take the tool.', ['@tool_name' => $tool_name]));
       \Drupal::service('lending_library.manager')->sendCheckoutEmail($transaction_entity);
       $form_state->setRedirectUrl(Url::fromUri('internal:/library/borrowed'));

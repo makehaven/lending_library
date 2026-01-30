@@ -40,6 +40,12 @@ settings:
       value: replacement_paid
       label: 'Replacement fee paid'
     -
+      value: premium_pending
+      label: 'Premium fee pending'
+    -
+      value: premium_paid
+      label: 'Premium fee paid'
+    -
       value: waived
       label: 'Fees waived'
     -
