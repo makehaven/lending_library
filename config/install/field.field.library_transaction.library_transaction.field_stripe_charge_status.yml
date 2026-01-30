@@ -1,0 +1,21 @@
+uuid: f6789012-3456-7890-f012-678901234567
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_stripe_charge_status
+  module:
+    - options
+id: library_transaction.library_transaction.field_stripe_charge_status
+field_name: field_stripe_charge_status
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Stripe Charge Status'
+description: 'The status of the Stripe payment charge.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: list_string

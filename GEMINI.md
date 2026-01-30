@@ -31,7 +31,7 @@ The **Lending Library** is a custom Drupal 10/11 module designed for MakeHaven. 
 ### Configuration
 *   **Permissions:** Defined in `lending_library.permissions.yml`.
 *   **Routes:** Defined in `lending_library.routing.yml`.
-*   **Settings:** Configurable via `/admin/config/makehaven/lending-library`.
+*   **Settings:** Configurable via `/admin/config/services/lending-library`.
 
 ## Development Environment
 

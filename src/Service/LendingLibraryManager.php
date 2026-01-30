@@ -237,7 +237,7 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function calculateLateFee(EntityInterface $transaction, DrupalDateTime $return_date = NULL) {
+  public function calculateLateFee(EntityInterface $transaction, ?DrupalDateTime $return_date = NULL) {
     if ($transaction->get(self::TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
       return NULL;
     }

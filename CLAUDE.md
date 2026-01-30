@@ -63,7 +63,7 @@ lando sh -c "vendor/bin/phpcs --standard=Drupal web/modules/custom/lending_libra
 | `/library/stats` | Analytics dashboard |
 | `/library/stats/data` | JSON API for stats |
 | `/library/manager` | Admin dashboard |
-| `/admin/config/makehaven/lending-library` | Settings form |
+| `/admin/config/services/lending-library` | Settings form |
 
 ### Stats Integration
 
@@ -97,7 +97,7 @@ $snapshot = $stats->buildSnapshotPayload($data); // Flattened KPIs
 - Field machine names prefixed with `field_library_` (transactions) or `field_library_item_` (nodes)
 - Entity types use ECK; bundles defined in `config/install/eck.eck_type.*.yml`
 - Permissions in `lending_library.permissions.yml`
-- Email templates configurable at `/admin/config/makehaven/lending-library`
+- Email templates configurable at `/admin/config/services/lending-library`
 
 ## Critical Notes
 

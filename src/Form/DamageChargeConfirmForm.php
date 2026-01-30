@@ -76,7 +76,7 @@ class DamageChargeConfirmForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, EckEntityInterface $library_transaction = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, ?EckEntityInterface $library_transaction = NULL) {
     $this->libraryTransaction = $library_transaction;
 
     $form = parent::buildForm($form, $form_state);

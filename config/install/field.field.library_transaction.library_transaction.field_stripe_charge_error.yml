@@ -1,0 +1,21 @@
+uuid: 18901234-5678-9012-1234-890123456789
+langcode: en
+status: true
+dependencies:
+  config:
+    - eck.eck_type.library_transaction.library_transaction
+    - field.storage.library_transaction.field_stripe_charge_error
+  module:
+    - text
+id: library_transaction.library_transaction.field_stripe_charge_error
+field_name: field_stripe_charge_error
+entity_type: library_transaction
+bundle: library_transaction
+label: 'Stripe Charge Error'
+description: 'Error message if the Stripe charge failed.'
+required: false
+translatable: false
+default_value: {  }
+default_value_callback: ''
+settings: {  }
+field_type: text_long

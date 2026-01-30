@@ -1,0 +1,21 @@
+uuid: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+id: library_transaction.field_stripe_payment_intent_id
+field_name: field_stripe_payment_intent_id
+entity_type: library_transaction
+type: string
+settings:
+  max_length: 255
+  is_ascii: true
+  case_sensitive: false
+module: core
+locked: false
+cardinality: 1
+translatable: false
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

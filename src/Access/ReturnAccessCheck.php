@@ -44,7 +44,7 @@ class ReturnAccessCheck implements AccessInterface {
    * @return \Drupal\Core\Access\AccessResultInterface
    *   The access result.
    */
-  public function access(AccountInterface $account, NodeInterface $node = NULL) {
+  public function access(AccountInterface $account, ?NodeInterface $node = NULL) {
     // Standard permission check.
     if ($account->hasPermission('create library_transaction entities')) {
       return AccessResult::allowed()

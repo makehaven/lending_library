@@ -10,6 +10,10 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Controller for handling PayPal IPN notifications.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use Stripe integration instead. Configure at /admin/config/services/lending-library.
+ * @see \Drupal\lending_library\Controller\StripeWebhookController
  */
 class PaypalIpnController extends ControllerBase {
 

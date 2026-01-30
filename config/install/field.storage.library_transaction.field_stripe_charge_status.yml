@@ -1,0 +1,36 @@
+uuid: b2c3d4e5-f678-9012-bcde-f23456789012
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - options
+id: library_transaction.field_stripe_charge_status
+field_name: field_stripe_charge_status
+entity_type: library_transaction
+type: list_string
+settings:
+  allowed_values:
+    -
+      value: pending
+      label: Pending
+    -
+      value: succeeded
+      label: Succeeded
+    -
+      value: failed
+      label: Failed
+    -
+      value: requires_payment_method
+      label: 'Requires payment method'
+    -
+      value: refunded
+      label: Refunded
+  allowed_values_function: ''
+module: options
+locked: false
+cardinality: 1
+translatable: false
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

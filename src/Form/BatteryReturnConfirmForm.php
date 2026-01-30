@@ -45,7 +45,7 @@ class BatteryReturnConfirmForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, EntityInterface $battery = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, ?EntityInterface $battery = NULL) {
     $this->battery = $battery;
     return parent::buildForm($form, $form_state);
   }

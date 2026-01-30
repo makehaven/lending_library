@@ -135,6 +135,84 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#field_suffix' => '%',
     ];
 
+    // Stripe Payment Settings.
+    $form['stripe_settings'] = [
+      '#type' => 'details',
+      '#title' => $this->t('Stripe Payment Settings'),
+      '#open' => TRUE,
+    ];
+
+    $form['stripe_settings']['stripe_enabled'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable Stripe Integration'),
+      '#description' => $this->t('Enable Stripe for automatic payment processing of late fees and charges.'),
+      '#default_value' => $config->get('stripe_enabled'),
+    ];
+
+    $form['stripe_settings']['stripe_require_customer_for_checkout'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Require Stripe customer for checkout'),
+      '#description' => $this->t('If enabled, users must have a linked Stripe customer account before they can borrow items.'),
+      '#default_value' => $config->get('stripe_require_customer_for_checkout'),
+      '#states' => [
+        'visible' => [
+          ':input[name="stripe_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['stripe_settings']['stripe_auto_charge_threshold'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Auto-charge threshold'),
+      '#description' => $this->t('Minimum amount due before automatic Stripe charges are processed. Set to 0 to charge any amount.'),
+      '#default_value' => $config->get('stripe_auto_charge_threshold') ?: 10.00,
+      '#min' => 0,
+      '#step' => '0.01',
+      '#field_prefix' => '$',
+      '#states' => [
+        'visible' => [
+          ':input[name="stripe_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['stripe_settings']['stripe_weekly_charge_enabled'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Enable weekly batch charging'),
+      '#description' => $this->t('If enabled, outstanding fees above the threshold will be charged weekly (on Mondays) via cron. <strong>Warning:</strong> Only transactions created after the Effective Date below will be charged.'),
+      '#default_value' => $config->get('stripe_weekly_charge_enabled'),
+      '#states' => [
+        'visible' => [
+          ':input[name="stripe_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['stripe_settings']['stripe_effective_date'] = [
+      '#type' => 'date',
+      '#title' => $this->t('Stripe Effective Date'),
+      '#description' => $this->t('<strong>Important:</strong> Only transactions created on or after this date will be auto-charged. Set this to today\'s date when first enabling Stripe to avoid charging historical fees. Leave empty to disable all automatic charging (charges on return will still work for new transactions).'),
+      '#default_value' => $config->get('stripe_effective_date') ?: '',
+      '#states' => [
+        'visible' => [
+          ':input[name="stripe_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['stripe_settings']['stripe_webhook_secret'] = [
+      '#type' => 'textfield',
+      '#title' => $this->t('Stripe Webhook Secret'),
+      '#description' => $this->t('The webhook signing secret from your Stripe dashboard. Used to verify webhook signatures.'),
+      '#default_value' => $config->get('stripe_webhook_secret') ?: '',
+      '#access' => \Drupal::currentUser()->hasPermission('administer lending library payment configuration'),
+      '#states' => [
+        'visible' => [
+          ':input[name="stripe_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
     $form['loan_settings']['loan_terms_html'] = [
       '#type' => 'textarea',
       '#title' => $this->t('Loan terms (HTML shown on checkout form)'),
@@ -691,6 +769,12 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'email_late_return_fee_body',
       'email_renewal_confirmation_subject',
       'email_renewal_confirmation_body',
+      'stripe_enabled',
+      'stripe_require_customer_for_checkout',
+      'stripe_auto_charge_threshold',
+      'stripe_weekly_charge_enabled',
+      'stripe_effective_date',
+      'stripe_webhook_secret',
     ];
 
     foreach ($keys_to_save as $key) {

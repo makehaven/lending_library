@@ -70,7 +70,7 @@ lending_library.mark_available:
 
 
 lending_library.settings:
-  path: '/admin/config/makehaven/lending-library'
+  path: '/admin/config/services/lending-library'
   defaults:
     _form: '\Drupal\lending_library\Form\LendingLibrarySettingsForm'
     _title: 'Lending Library settings'
@@ -78,7 +78,7 @@ lending_library.settings:
     _permission: 'administer lending library configuration'
 
 lending_library.test_form:
-  path: '/admin/config/makehaven/lending-library/test'
+  path: '/admin/config/services/lending-library/test'
   defaults:
     _form: '\Drupal\lending_library\Form\LendingLibraryTestTriggerForm'
     _title: 'Test Triggers'
@@ -118,6 +118,15 @@ lending_library.paypal_ipn_listener:
   defaults:
     _controller: '\Drupal\lending_library\Controller\PaypalIpnController::ipnListener'
     _title: 'PayPal IPN Listener'
+  methods: [POST]
+  requirements:
+    _access: 'TRUE'
+
+lending_library.stripe_webhook:
+  path: '/lending-library/stripe-webhook'
+  defaults:
+    _controller: '\Drupal\lending_library\Controller\StripeWebhookController::webhook'
+    _title: 'Stripe Webhook'
   methods: [POST]
   requirements:
     _access: 'TRUE'

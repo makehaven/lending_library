@@ -5,6 +5,7 @@ package: Makerspace
 core_version_requirement: ^10 || ^11
 dependencies:
   - drupal:eck
+  - mh_stripe:mh_stripe
   - drupal:user
   - drupal:field
   - drupal:node

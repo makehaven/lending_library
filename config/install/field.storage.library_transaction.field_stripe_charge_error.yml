@@ -1,0 +1,19 @@
+uuid: d4e5f678-9012-3456-def0-456789012345
+langcode: en
+status: true
+dependencies:
+  module:
+    - eck
+    - text
+id: library_transaction.field_stripe_charge_error
+field_name: field_stripe_charge_error
+entity_type: library_transaction
+type: text_long
+settings: {  }
+module: text
+locked: false
+cardinality: 1
+translatable: false
+indexes: {  }
+persist_with_no_fields: false
+custom_storage: false

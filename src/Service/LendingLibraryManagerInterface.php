@@ -77,7 +77,7 @@ interface LendingLibraryManagerInterface {
    * @return array|null
    *   An array with 'days_late' and 'late_fee' or NULL.
    */
-  public function calculateLateFee(EntityInterface $transaction, DrupalDateTime $return_date = NULL);
+  public function calculateLateFee(EntityInterface $transaction, ?DrupalDateTime $return_date = NULL);
 
   /**
    * Calculates the value of unreturned batteries for a transaction.

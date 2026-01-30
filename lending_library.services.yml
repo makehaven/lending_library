@@ -28,3 +28,10 @@ services:
       - '@plugin.manager.mail'
       - '@language_manager'
       - '@entity_field.manager'
+
+  lending_library.stripe:
+    class: Drupal\lending_library\Service\LendingLibraryStripe
+    arguments:
+      - '@mh_stripe.helper'
+      - '@config.factory'
+      - '@logger.factory'

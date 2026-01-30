@@ -22,7 +22,7 @@ administer lending library configuration:
 
 administer lending library payment configuration:
   title: 'Administer Lending Library payment configuration'
-  description: 'Allows users to change the PayPal account on the Lending Library configuration page.'
+  description: 'Allows users to configure payment settings (Stripe, PayPal) on the Lending Library configuration page.'
 
 'get in line for library items':
   title: 'Get in line for library items'

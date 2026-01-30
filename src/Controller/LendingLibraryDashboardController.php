@@ -582,7 +582,7 @@ class LendingLibraryDashboardController extends ControllerBase {
         ],
         [
           'title' => 'Library Settings',
-          'url' => '/admin/config/makehaven/lending-library',
+          'url' => '/admin/config/services/lending-library',
           'description' => 'Configure email templates and fees.',
         ],
       ],

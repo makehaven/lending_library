@@ -44,7 +44,7 @@ This Drupal custom module powers the MakeHaven Lending Library. It manages tool 
   - `email_checkout_footer` – appended to checkout confirmation email  
   - `email_return_body` – default body for return confirmation email  
   - `email_issue_notice_intro` – intro text for issue report emails  
-  - Defaults load on first install and can be edited at `/admin/config/makehaven/lending-library`
+  - Defaults load on first install and can be edited at `/admin/config/services/lending-library`
 
 ## Analytics & Dashboards
 
@@ -114,7 +114,7 @@ This Drupal custom module powers the MakeHaven Lending Library. It manages tool 
 ## Configuration
 
 - **Staff Email**: The module uses the site-wide email address as the default for issue notifications. To change it, edit the constant `LENDING_LIBRARY_STAFF_EMAIL` in `lending_library.module`.  
-- **Loan Terms & Email Templates**: Edit values at `/admin/config/makehaven/lending-library`. Default content is preloaded on install as an example.  
+- **Loan Terms & Email Templates**: Edit values at `/admin/config/services/lending-library`. Default content is preloaded on install as an example.  
 - **Battery Return Logging**: The helper `_lending_library_battery_save_with_revision()` will log a revision message if the Battery entity type supports revisions, otherwise it performs a normal save.
 
 ## Troubleshooting

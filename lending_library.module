@@ -78,15 +78,19 @@ function lending_library_manager() {
 
 /**
  * Helper: get status, borrower, and replacement value from the library_item node.
- * @deprecated Use \Drupal::service('lending_library.manager')->getItemDetails() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->getItemDetails() instead.
  */
-function _lending_library_get_item_details(NodeInterface $library_item_node = NULL) {
+function _lending_library_get_item_details(?NodeInterface $library_item_node = NULL) {
   return \Drupal::service('lending_library.manager')->getItemDetails($library_item_node);
 }
 
 /**
  * Sends a "due soon" email.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendDueSoonEmail() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->sendDueSoonEmail() instead.
  */
 function _lending_library_send_due_soon_email(EntityInterface $transaction) {
   \Drupal::service('lending_library.manager')->sendDueSoonEmail($transaction);
@@ -94,16 +98,19 @@ function _lending_library_send_due_soon_email(EntityInterface $transaction) {
 
 /**
  * Helper: get current loan borrow/due dates from latest withdraw transaction.
- * @deprecated Use \Drupal::service('lending_library.manager')->getCurrentLoanDetails() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->getCurrentLoanDetails() instead.
  */
 function _lending_library_get_current_loan_details(NodeInterface $library_item_node) {
   return \Drupal::service('lending_library.manager')->getCurrentLoanDetails($library_item_node);
 }
 
-
 /**
  * Load batteries currently borrowed for a given item + borrower.
- * @deprecated Use \Drupal::service('lending_library.manager')->loadBorrowedBatteries() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->loadBorrowedBatteries() instead.
  */
 function _lending_library_load_borrowed_batteries($item_nid, $borrower_uid) {
   return \Drupal::service('lending_library.manager')->loadBorrowedBatteries($item_nid, $borrower_uid);
@@ -111,7 +118,9 @@ function _lending_library_load_borrowed_batteries($item_nid, $borrower_uid) {
 
 /**
  * Mark the provided batteries as returned (available + clear borrower/item).
- * @deprecated Use \Drupal::service('lending_library.manager')->returnBatteries() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->returnBatteries() instead.
  */
 function _lending_library_return_batteries(array $batteries) {
   \Drupal::service('lending_library.manager')->returnBatteries($batteries);
@@ -544,6 +553,16 @@ function _lending_library_transaction_form_validate(&$form, FormStateInterface $
         $form_state->setErrorByName('lending_library_agreement_acknowledge', t('This item would exceed your maximum allowed total borrowing value ($@value).', ['@value' => $max_tool_value]));
       }
     }
+
+    // Check for Stripe customer requirement.
+    $stripe_service = \Drupal::service('lending_library.stripe');
+    if ($stripe_service->isCustomerRequiredForCheckout()) {
+      $user = User::load($current_user_id);
+      if ($user && !$stripe_service->hasStripeCustomer($user)) {
+        $billing_url = Url::fromRoute('mh_stripe.user_billing', ['user' => $current_user_id])->toString();
+        $form_state->setErrorByName('lending_library_agreement_acknowledge', t('You must link a payment method before borrowing. <a href="@url">Add Payment Method</a>', ['@url' => $billing_url]));
+      }
+    }
   }
 
   if ($action === LENDING_LIBRARY_ACTION_RETURN) {
@@ -675,6 +694,42 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
                 \Drupal::service('lending_library.manager')->sendEmailByKey($transaction_entity, 'condition_charge', ['amount_due' => $unreturned_battery_charge]);
                 $charge_applied = TRUE;
             }
+        }
+
+        // Process Stripe charge if fees are due.
+        $stripe_service = \Drupal::service('lending_library.stripe');
+        if ($stripe_service->isEnabled() && $charge_applied) {
+          $total_amount_due = $transaction_entity->hasField('field_library_amount_due')
+            ? (float) $transaction_entity->get('field_library_amount_due')->value
+            : 0;
+
+          if ($total_amount_due > 0) {
+            $user = User::load($borrower_uid);
+            if ($user && $stripe_service->hasStripeCustomer($user)) {
+              $description = t('Library late fee for @tool', ['@tool' => $tool_name]);
+              $charge_result = $stripe_service->createCharge(
+                $user,
+                $total_amount_due,
+                (string) $description,
+                $transaction_entity,
+                'late_fee'
+              );
+
+              // Update transaction with Stripe charge result.
+              $stripe_service->updateTransactionWithChargeResult($transaction_entity, $charge_result);
+
+              if ($charge_result['success']) {
+                \Drupal::messenger()->addStatus(t('A late fee of $@amount has been charged to your payment method on file.', [
+                  '@amount' => number_format($total_amount_due, 2),
+                ]));
+              }
+              else {
+                \Drupal::messenger()->addWarning(t('We were unable to charge your payment method. A staff member will contact you regarding the $@amount fee.', [
+                  '@amount' => number_format($total_amount_due, 2),
+                ]));
+              }
+            }
+          }
         }
 
         \Drupal::messenger()->addStatus(t('@tool_name has been successfully returned. Thank you!', ['@tool_name' => $tool_name]));
@@ -1161,28 +1216,164 @@ function lending_library_cron() {
     }
   }
 
+  // Weekly Stripe batch charging (runs on Mondays).
+  _lending_library_process_weekly_stripe_charges($logger);
+
   $logger->notice('Lending library cron job finished.');
 }
 
 /**
- * Processes a transaction for a non-returned item.
- * @deprecated Use \Drupal::service('lending_library.manager')->processNonReturnCharge() instead.
+ * Process weekly Stripe charges for outstanding fees.
+ *
+ * @param \Psr\Log\LoggerInterface $logger
+ *   The logger.
  */
+function _lending_library_process_weekly_stripe_charges($logger) {
+  $stripe_service = \Drupal::service('lending_library.stripe');
+
+  if (!$stripe_service->isWeeklyChargeEnabled()) {
+    return;
+  }
+
+  // Only run on Mondays (day 1).
+  $day_of_week = (int) date('w');
+  if ($day_of_week !== 1) {
+    return;
+  }
+
+  // Check effective date - do not charge transactions created before this date.
+  $config = \Drupal::config('lending_library.settings');
+  $effective_date = $config->get('stripe_effective_date');
+  if (empty($effective_date)) {
+    $logger->notice('Weekly Stripe charging skipped: No effective date configured.');
+    return;
+  }
+
+  $threshold = $stripe_service->getAutoChargeThreshold();
+  $logger->notice('Processing weekly Stripe charges with threshold: $@threshold, effective date: @date', [
+    '@threshold' => number_format($threshold, 2),
+    '@date' => $effective_date,
+  ]);
+
+  // Convert effective date to timestamp for comparison with entity created time.
+  $effective_timestamp = strtotime($effective_date);
+
+  // Query transactions with amount_due >= threshold
+  // that haven't been successfully charged yet.
+  // Only include transactions created on or after the effective date.
+  $query = \Drupal::entityQuery('library_transaction')
+    ->accessCheck(FALSE)
+    ->condition('field_library_amount_due', $threshold, '>=')
+    ->condition('field_library_closed', 1, '<>')
+    ->condition('created', $effective_timestamp, '>=');
+
+  // Exclude transactions already charged successfully.
+  $or_condition = $query->orConditionGroup()
+    ->notExists('field_stripe_charge_status')
+    ->condition('field_stripe_charge_status', 'succeeded', '<>');
+  $query->condition($or_condition);
+
+  // Exclude transactions flagged for manual review.
+  $or_manual = $query->orConditionGroup()
+    ->notExists('field_stripe_manual_review')
+    ->condition('field_stripe_manual_review', 1, '<>');
+  $query->condition($or_manual);
+
+  $transaction_ids = $query->execute();
+
+  if (empty($transaction_ids)) {
+    $logger->notice('No transactions eligible for weekly Stripe charging.');
+    return;
+  }
+
+  $transactions = \Drupal::entityTypeManager()
+    ->getStorage('library_transaction')
+    ->loadMultiple($transaction_ids);
+
+  $charged_count = 0;
+  $failed_count = 0;
+
+  foreach ($transactions as $transaction) {
+    if (!$transaction->hasField('field_library_borrower') || $transaction->get('field_library_borrower')->isEmpty()) {
+      continue;
+    }
+
+    $borrower_uid = $transaction->get('field_library_borrower')->target_id;
+    $user = User::load($borrower_uid);
+
+    if (!$user || !$stripe_service->hasStripeCustomer($user)) {
+      continue;
+    }
+
+    $amount_due = (float) $transaction->get('field_library_amount_due')->value;
+
+    // Get tool name for description.
+    $tool_name = 'Library Item';
+    if ($transaction->hasField('field_library_item') && !$transaction->get('field_library_item')->isEmpty()) {
+      $item = $transaction->get('field_library_item')->entity;
+      if ($item) {
+        $tool_name = $item->label();
+      }
+    }
+
+    $description = t('Library fee for @tool (weekly charge)', ['@tool' => $tool_name]);
+    $charge_result = $stripe_service->createCharge(
+      $user,
+      $amount_due,
+      (string) $description,
+      $transaction,
+      'weekly_batch'
+    );
+
+    $stripe_service->updateTransactionWithChargeResult($transaction, $charge_result);
+
+    if ($charge_result['success']) {
+      $charged_count++;
+      $logger->notice('Weekly Stripe charge successful: $@amount for transaction @tid', [
+        '@amount' => number_format($amount_due, 2),
+        '@tid' => $transaction->id(),
+      ]);
+    }
+    else {
+      $failed_count++;
+      $logger->warning('Weekly Stripe charge failed for transaction @tid: @error', [
+        '@tid' => $transaction->id(),
+        '@error' => $charge_result['error'] ?? 'Unknown error',
+      ]);
+    }
+  }
+
+  $logger->notice('Weekly Stripe charging complete: @charged charged, @failed failed', [
+    '@charged' => $charged_count,
+    '@failed' => $failed_count,
+  ]);
+}
+
 /**
  * Calculates late fee for a transaction.
- * @deprecated Use \Drupal::service('lending_library.manager')->calculateLateFee() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->calculateLateFee() instead.
  */
 function _lending_library_calculate_late_fee(EntityInterface $transaction, $return_date = NULL) {
   return \Drupal::service('lending_library.manager')->calculateLateFee($transaction, $return_date);
 }
 
+/**
+ * Processes a transaction for a non-returned item.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->processNonReturnCharge() instead.
+ */
 function _lending_library_process_non_return_charge(EntityInterface $transaction, $non_return_charge_percentage) {
   \Drupal::service('lending_library.manager')->processNonReturnCharge($transaction, $non_return_charge_percentage);
 }
 
 /**
  * Helper to send email based on a key.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendEmailByKey() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->sendEmailByKey() instead.
  */
 function _lending_library_send_email_by_key(EntityInterface $transaction, $key, $extra_params = []) {
   \Drupal::service('lending_library.manager')->sendEmailByKey($transaction, $key, $extra_params);
@@ -1190,7 +1381,9 @@ function _lending_library_send_email_by_key(EntityInterface $transaction, $key, 
 
 /**
  * Calculates the value of unreturned batteries for a transaction.
- * @deprecated Use \Drupal::service('lending_library.manager')->calculateUnreturnedBatteryValue() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->calculateUnreturnedBatteryValue() instead.
  */
 function _lending_library_calculate_unreturned_battery_value(EntityInterface $transaction) {
   return \Drupal::service('lending_library.manager')->calculateUnreturnedBatteryValue($transaction);
@@ -1390,9 +1583,13 @@ function lending_library_library_info_build() {
 
 
 /**
- * Save a Battery entity. If the entity type is revisionable, create a new revision;
+ * Save a Battery entity with revision support.
+ *
+ * If the entity type is revisionable, create a new revision;
  * otherwise just do a normal save.
- * @deprecated Use \Drupal::service('lending_library.manager')->saveBatteryWithRevision() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->saveBatteryWithRevision() instead.
  */
 function _lending_library_battery_save_with_revision(EntityInterface $battery, $message = '', $uid = NULL) {
   \Drupal::service('lending_library.manager')->saveBatteryWithRevision($battery, $message, $uid);
@@ -1412,7 +1609,9 @@ function _lending_library_add_capture_attribute(&$element, FormStateInterface $f
 
 /**
  * Sends a checkout confirmation email to the borrower.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendCheckoutEmail() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->sendCheckoutEmail() instead.
  */
 function _lending_library_send_checkout_email(EntityInterface $transaction_entity) {
   \Drupal::service('lending_library.manager')->sendCheckoutEmail($transaction_entity);
@@ -1420,7 +1619,9 @@ function _lending_library_send_checkout_email(EntityInterface $transaction_entit
 
 /**
  * Sends a return confirmation email to the borrower.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendReturnEmail() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->sendReturnEmail() instead.
  */
 function _lending_library_send_return_email(EntityInterface $transaction_entity) {
   \Drupal::service('lending_library.manager')->sendReturnEmail($transaction_entity);
@@ -1428,26 +1629,9 @@ function _lending_library_send_return_email(EntityInterface $transaction_entity)
 
 /**
  * Sends an issue report notification to staff.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendStaffEmail() instead.
- */
-/**
- * Sends an administrative email based on a transaction and email key.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendStaffEmail() instead.
- */
-function _lending_library_send_staff_email($email_key, EntityInterface $transaction_entity, $address_config_key) {
-  // We don't have a direct 1:1 for this private helper on the service public interface (it's protected),
-  // but we can map the public calls to it.
-  // However, for this deprecated function, we can't easily call the protected method.
-  // So, we should probably keep the body here OR expose the protected method.
-  // Let's expose it or just leave it for now as it's a helper.
-  // Actually, issue/damage calls are public.
-  // Let's check usages. It's used by issue and damaged below.
-  // We'll deprecate those too.
-}
-
-/**
- * Sends an issue report notification to staff.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendIssueEmail() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->sendIssueEmail() instead.
  */
 function _lending_library_send_issue_email(EntityInterface $transaction_entity) {
   \Drupal::service('lending_library.manager')->sendIssueEmail($transaction_entity);
@@ -1455,7 +1639,9 @@ function _lending_library_send_issue_email(EntityInterface $transaction_entity) 
 
 /**
  * Sends a damage report notification to staff.
- * @deprecated Use \Drupal::service('lending_library.manager')->sendDamagedEmail() instead.
+ *
+ * @deprecated in lending_library:2.0.0 and is removed from lending_library:3.0.0.
+ *   Use \Drupal::service('lending_library.manager')->sendDamagedEmail() instead.
  */
 function _lending_library_send_damaged_email(EntityInterface $transaction_entity) {
   \Drupal::service('lending_library.manager')->sendDamagedEmail($transaction_entity);
@@ -1483,16 +1669,26 @@ function lending_library_mail($key, &$message, $params) {
 
   $cfg = \Drupal::config('lending_library.settings');
 
-  // Generate payment link if applicable.
+  // Generate payment messaging based on configured payment method.
+  // When Stripe is enabled, we auto-charge so no payment link is needed.
+  // The [payment_link] token will be replaced with appropriate messaging.
   if (isset($params['amount_due']) && $params['amount_due'] > 0) {
-    $paypal_email = $cfg->get('paypal_email');
-    if (!empty($paypal_email)) {
-      $item_name_encoded = urlencode($params['tool_name'] . ' - Library Fee');
-      $amount_encoded = urlencode($params['amount_due']);
-      // The transaction ID is not available here directly, but can be passed in params.
-      $custom_encoded = isset($params['transaction_id']) ? urlencode($params['transaction_id']) : '';
-      $paypal_email_encoded = urlencode($paypal_email);
-      $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business={$paypal_email_encoded}&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
+    $stripe_enabled = $cfg->get('stripe_enabled');
+    if ($stripe_enabled) {
+      // Stripe auto-charges, so provide informational message instead of link.
+      $params['payment_link'] = '';
+      $params['payment_info'] = t('Your payment method on file will be charged automatically.');
+    }
+    else {
+      // Fallback to PayPal link for backwards compatibility (deprecated).
+      $paypal_email = $cfg->get('paypal_email');
+      if (!empty($paypal_email)) {
+        $item_name_encoded = urlencode($params['tool_name'] . ' - Library Fee');
+        $amount_encoded = urlencode($params['amount_due']);
+        $custom_encoded = isset($params['transaction_id']) ? urlencode($params['transaction_id']) : '';
+        $paypal_email_encoded = urlencode($paypal_email);
+        $params['payment_link'] = "https://www.paypal.com/cgi-bin/webscr?cmd=_cart&business={$paypal_email_encoded}&lc=US&item_name={$item_name_encoded}&amount={$amount_encoded}&currency_code=USD&button_subtype=products&no_note=1&add=1&custom={$custom_encoded}&bn=PP-ShopCartBF%3Abtn_cart_SM.gif%3ANonHosted&no_shipping=1&tax_rate=0";
+      }
     }
   }
 
@@ -1579,6 +1775,15 @@ function lending_library_mail($key, &$message, $params) {
       $subject = $cfg->get('email_auto_return_subject') ?: 'Your borrowed tool has been automatically returned';
       $body_template = $cfg->get('email_auto_return_body') ?: "Hello [borrower_name],\n\nThe tool '[tool_name]' that you had borrowed has been automatically marked as returned because another member needed to check it out.\n\nIf you still have this tool in your possession, please contact staff immediately.";
       break;
+
+    case 'staff_payment_failed':
+      // Staff notification for failed Stripe payments - uses direct params.
+      $subject = $params['subject'] ?? 'Lending Library Payment Failed';
+      $body_template = $params['body'] ?? 'A payment has failed and requires manual review.';
+      // Don't apply standard replacements for this email type.
+      $message['subject'] = $subject;
+      $message['body'][] = $body_template;
+      return;
   }
 
   if (!empty($subject) && !empty($body_template)) {
@@ -1613,30 +1818,29 @@ function lending_library_entity_presave(EntityInterface $entity) {
 function lending_library_theme($existing, $type, $theme, $path) {
   $module_path = \Drupal::service('extension.list.module')->getPath('lending_library');
   return [
-        'lending_library_stats' => [
-          'variables' => [
-            'stats' => [],
-            'charts' => [],
-          ],
-          'template' => 'lending-library-stats',
-          'path' => $module_path . '/templates',
-        ],
-                    'lending_library_dashboard' => [
-                      'variables' => [
-                        'stats' => [],
-                        'triggers' => [],
-                        'recent_activity' => [],
-                        'grouped_links' => [],
-                        'due_soon_items' => [],
-                        'overdue_items' => [],
-                        'debtors' => [],
-                        'key_stats' => [],
-                        'damaged_items' => [],
-                      ],
-                      'template' => 'lending-library-dashboard',
-                      'path' => $module_path . '/templates',
-                    ],
-                
-                  ];
-    }
+    'lending_library_stats' => [
+      'variables' => [
+        'stats' => [],
+        'charts' => [],
+      ],
+      'template' => 'lending-library-stats',
+      'path' => $module_path . '/templates',
+    ],
+    'lending_library_dashboard' => [
+      'variables' => [
+        'stats' => [],
+        'triggers' => [],
+        'recent_activity' => [],
+        'grouped_links' => [],
+        'due_soon_items' => [],
+        'overdue_items' => [],
+        'debtors' => [],
+        'key_stats' => [],
+        'damaged_items' => [],
+      ],
+      'template' => 'lending-library-dashboard',
+      'path' => $module_path . '/templates',
+    ],
+  ];
+}
     
