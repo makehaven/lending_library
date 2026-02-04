@@ -245,23 +245,15 @@ function lending_library_update_10008() {
   $settings = $field_storage->get('settings');
   $allowed_values = $settings['allowed_values'] ?? [];
 
-  // Check if premium values already exist.
-  $existing_keys = array_column($allowed_values, 'value');
   $added = [];
 
-  if (!in_array('premium_pending', $existing_keys)) {
-    $allowed_values[] = [
-      'value' => 'premium_pending',
-      'label' => 'Premium fee pending',
-    ];
+  if (!isset($allowed_values['premium_pending'])) {
+    $allowed_values['premium_pending'] = 'Premium fee pending';
     $added[] = 'premium_pending';
   }
 
-  if (!in_array('premium_paid', $existing_keys)) {
-    $allowed_values[] = [
-      'value' => 'premium_paid',
-      'label' => 'Premium fee paid',
-    ];
+  if (!isset($allowed_values['premium_paid'])) {
+    $allowed_values['premium_paid'] = 'Premium fee paid';
     $added[] = 'premium_paid';
   }
 
@@ -290,22 +282,15 @@ function lending_library_update_10009() {
   $settings = $field_storage->get('settings');
   $allowed_values = $settings['allowed_values'] ?? [];
 
-  $existing_keys = array_column($allowed_values, 'value');
   $added = [];
 
-  if (!in_array('per_use_pending', $existing_keys)) {
-    $allowed_values[] = [
-      'value' => 'per_use_pending',
-      'label' => 'Per-use fee pending',
-    ];
+  if (!isset($allowed_values['per_use_pending'])) {
+    $allowed_values['per_use_pending'] = 'Per-use fee pending';
     $added[] = 'per_use_pending';
   }
 
-  if (!in_array('per_use_paid', $existing_keys)) {
-    $allowed_values[] = [
-      'value' => 'per_use_paid',
-      'label' => 'Per-use fee paid',
-    ];
+  if (!isset($allowed_values['per_use_paid'])) {
+    $allowed_values['per_use_paid'] = 'Per-use fee paid';
     $added[] = 'per_use_paid';
   }
 
