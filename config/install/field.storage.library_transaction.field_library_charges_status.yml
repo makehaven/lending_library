@@ -46,6 +46,12 @@ settings:
       value: premium_paid
       label: 'Premium fee paid'
     -
+      value: per_use_pending
+      label: 'Per-use fee pending'
+    -
+      value: per_use_paid
+      label: 'Per-use fee paid'
+    -
       value: waived
       label: 'Fees waived'
     -

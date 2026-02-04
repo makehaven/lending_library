@@ -167,13 +167,24 @@ interface LendingLibraryManagerInterface {
   public function createBatteryTransaction(EntityInterface $battery, string $action, ?int $borrower_uid, ?EntityInterface $tool_transaction = NULL);
 
   /**
-   * Checks if a library item is considered "Premium" based on current config.
+   * Calculates the per-use fee for a library item.
+   *
+   * @param \Drupal\node\NodeInterface $library_item_node
+   *   The library item node.
+   *
+   * @return float
+   *   The per-use fee amount.
+   */
+  public function getPerUseFee(NodeInterface $library_item_node): float;
+
+  /**
+   * Checks if a library item should have a per-use fee.
    *
    * @param \Drupal\node\NodeInterface $library_item_node
    *   The library item node.
    *
    * @return bool
-   *   TRUE if the item is premium, FALSE otherwise.
+   *   TRUE if the item has a per-use fee, FALSE otherwise.
    */
-  public function isPremiumItem(NodeInterface $library_item_node);
+  public function isFeeItem(NodeInterface $library_item_node): bool;
 }

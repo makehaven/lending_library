@@ -221,7 +221,14 @@ class StripeWebhookController extends ControllerBase {
       $transaction->set('field_stripe_manual_review', FALSE);
     }
     if ($transaction->hasField('field_library_charges_status')) {
-      $transaction->set('field_library_charges_status', 'late_paid');
+      $charge_type = $metadata['charge_type'] ?? 'late_fee';
+      $paid_status_map = [
+        'late_fee' => 'late_paid',
+        'per_use_fee' => 'per_use_paid',
+        'damage' => 'damage_paid',
+        'replacement' => 'replacement_paid',
+      ];
+      $transaction->set('field_library_charges_status', $paid_status_map[$charge_type] ?? 'late_paid');
     }
     if ($transaction->hasField('field_library_amount_paid')) {
       $amountPaid = ($paymentIntent->amount_received ?? 0) / 100;

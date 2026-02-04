@@ -272,7 +272,7 @@ class LendingLibraryStripe implements LendingLibraryStripeInterface {
    * @param array $chargeResult
    *   The result from createCharge().
    * @param string $chargeType
-   *   The type of charge: 'late_fee', 'premium_fee', 'damage', 'replacement'.
+   *   The type of charge: 'late_fee', 'per_use_fee', 'premium_fee', 'damage', 'replacement'.
    *
    * @return bool
    *   TRUE if transaction was updated successfully.
@@ -306,7 +306,7 @@ class LendingLibraryStripe implements LendingLibraryStripeInterface {
         // Map charge type to the appropriate paid status.
         $paid_status_map = [
           'late_fee' => 'late_paid',
-          'premium_fee' => 'premium_paid',
+          'per_use_fee' => 'per_use_paid',
           'damage' => 'damage_paid',
           'replacement' => 'replacement_paid',
         ];

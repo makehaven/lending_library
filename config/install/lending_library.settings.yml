@@ -33,20 +33,10 @@ stripe_weekly_charge_enabled: false
 stripe_webhook_secret: ''
 stripe_effective_date: ''
 
-# Premium Tool Defaults
-
-premium_system_enabled: false
-
-premium_payment_enabled: false
-
-premium_definition_battery: true
-
-premium_definition_value_threshold: 150
-
-
-
-
-
-premium_fee_amount: 10.00
-
-premium_pass_price: 60.00
+# Per-Use Fee Defaults
+fee_system_enabled: false
+fee_free_threshold: 150
+fee_value_increment: 500
+fee_step_amount: 5
+fee_battery_value_adder_enabled: true
+fee_battery_value_adder: 150

@@ -46,7 +46,7 @@ interface LendingLibraryStripeInterface {
    * @param \Drupal\Core\Entity\EntityInterface $transaction
    *   The library transaction entity.
    * @param string $chargeType
-   *   Type of charge (late_fee, replacement, condition, etc.).
+   *   Type of charge (late_fee, per_use_fee, replacement, condition, etc.).
    *
    * @return array
    *   Array with keys:

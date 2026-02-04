@@ -73,83 +73,87 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#min' => 0,
     ];
 
-    $form['premium_settings'] = [
+    $form['per_use_fee_settings'] = [
       '#type' => 'details',
-      '#title' => $this->t('Premium Tool Settings'),
+      '#title' => $this->t('Per-Use Fee Settings'),
       '#open' => TRUE,
     ];
 
-    $form['premium_settings']['premium_system_enabled'] = [
+    $form['per_use_fee_settings']['fee_system_enabled'] = [
       '#type' => 'checkbox',
-      '#title' => $this->t('Enable Premium Tool System'),
-      '#description' => $this->t('If enabled, tools meeting the criteria below will be marked as Premium, displaying a badge and potentially enforcing fees.'),
-      '#default_value' => $config->get('premium_system_enabled'),
+      '#title' => $this->t('Enable Per-Use Fees'),
+      '#description' => $this->t('If enabled, per-use fees will be calculated at checkout based on effective value.'),
+      '#default_value' => $config->get('fee_system_enabled'),
     ];
 
-    $form['premium_settings']['premium_payment_enabled'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Enable Automatic Payment Collection'),
-      '#description' => $this->t('If enabled, users will be charged the Premium Borrow Fee automatically upon withdrawal (unless they have an active pass). Requires Stripe integration.'),
-      '#default_value' => $config->get('premium_payment_enabled'),
-      '#states' => [
-        'visible' => [
-          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['premium_settings']['premium_definition_battery'] = [
-      '#type' => 'checkbox',
-      '#title' => $this->t('Battery Tools are Premium'),
-      '#description' => $this->t('If checked, any tool that uses a battery is considered Premium.'),
-      '#default_value' => $config->get('premium_definition_battery') !== NULL ? $config->get('premium_definition_battery') : TRUE,
-      '#states' => [
-        'visible' => [
-          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['premium_settings']['premium_definition_value_threshold'] = [
+    $form['per_use_fee_settings']['fee_free_threshold'] = [
       '#type' => 'number',
-      '#title' => $this->t('Premium Value Threshold'),
-      '#description' => $this->t('Items with a replacement value equal to or greater than this amount are considered Premium. Set to 0 to disable value-based premium status.'),
-      '#default_value' => $config->get('premium_definition_value_threshold') ?: 150,
-      '#min' => 0,
-      '#field_prefix' => '$',
-      '#states' => [
-        'visible' => [
-          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
-        ],
-      ],
-    ];
-
-    $form['premium_settings']['premium_fee_amount'] = [
-      '#type' => 'number',
-      '#title' => $this->t('Premium Borrow Fee'),
-      '#description' => $this->t('The fee charged per borrow for a Premium tool.'),
-      '#default_value' => $config->get('premium_fee_amount') ?: 10.00,
+      '#title' => $this->t('Free Threshold'),
+      '#description' => $this->t('Items below this effective value are free to borrow.'),
+      '#default_value' => $config->get('fee_free_threshold') ?? 150,
       '#min' => 0,
       '#step' => '0.01',
       '#field_prefix' => '$',
       '#states' => [
         'visible' => [
-          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+          ':input[name="fee_system_enabled"]' => ['checked' => TRUE],
         ],
       ],
     ];
 
-    $form['premium_settings']['premium_pass_price'] = [
+    $form['per_use_fee_settings']['fee_value_increment'] = [
       '#type' => 'number',
-      '#title' => $this->t('Annual Pass Price'),
-      '#description' => $this->t('The cost of an annual Lending Library Pass. Currently for reference only; pass purchase functionality is not yet implemented.'),
-      '#default_value' => $config->get('premium_pass_price') ?: 60.00,
+      '#title' => $this->t('Value Increment'),
+      '#description' => $this->t('The effective value step size for increasing the per-use fee.'),
+      '#default_value' => $config->get('fee_value_increment') ?? 500,
+      '#min' => 1,
+      '#step' => '0.01',
+      '#field_prefix' => '$',
+      '#states' => [
+        'visible' => [
+          ':input[name="fee_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['per_use_fee_settings']['fee_step_amount'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Fee per Step'),
+      '#description' => $this->t('The amount charged for each step above the free threshold.'),
+      '#default_value' => $config->get('fee_step_amount') ?? 5,
       '#min' => 0,
       '#step' => '0.01',
       '#field_prefix' => '$',
       '#states' => [
         'visible' => [
-          ':input[name="premium_system_enabled"]' => ['checked' => TRUE],
+          ':input[name="fee_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['per_use_fee_settings']['fee_battery_value_adder_enabled'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Add Battery Value for Fee Calculation'),
+      '#description' => $this->t('If enabled, battery tools add the battery value adder to the effective value.'),
+      '#default_value' => $config->get('fee_battery_value_adder_enabled') ?? TRUE,
+      '#states' => [
+        'visible' => [
+          ':input[name="fee_system_enabled"]' => ['checked' => TRUE],
+        ],
+      ],
+    ];
+
+    $form['per_use_fee_settings']['fee_battery_value_adder'] = [
+      '#type' => 'number',
+      '#title' => $this->t('Battery Value Adder'),
+      '#description' => $this->t('The value added to battery tools when calculating effective value.'),
+      '#default_value' => $config->get('fee_battery_value_adder') ?? 150,
+      '#min' => 0,
+      '#step' => '0.01',
+      '#field_prefix' => '$',
+      '#states' => [
+        'visible' => [
+          ':input[name="fee_system_enabled"]' => ['checked' => TRUE],
         ],
       ],
     ];
@@ -216,11 +220,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       '#field_suffix' => '%',
     ];
 
-    // Stripe Payment Settings.
     $form['stripe_settings'] = [
       '#type' => 'details',
       '#title' => $this->t('Stripe Payment Settings'),
       '#open' => TRUE,
+    ];
+
+    $form['stripe_settings']['admin_note'] = [
+      '#type' => 'markup',
+      '#markup' => '<div class="messages messages--warning">'
+        . '<strong>' . $this->t('Administrative Policy Reminder:') . '</strong>'
+        . '<ul>'
+        . '<li>' . $this->t('MakeHaven has a <strong>No Cash</strong> policy for the Lending Library.') . '</li>'
+        . '<li>' . $this->t('<strong>To Waive a Fee:</strong> Edit the individual Library Transaction, set the <em>Amount Due</em> to $0.00, and optionally update the Payment Status.') . '</li>'
+        . '<li>' . $this->t('<strong>To Refund:</strong> Refunds must be processed through the Stripe Dashboard to ensure funds return to the correct card.') . '</li>'
+        . '</ul>'
+        . '</div>',
+      '#weight' => -10,
     ];
 
     $form['stripe_settings']['stripe_enabled'] = [
@@ -856,18 +872,23 @@ class LendingLibrarySettingsForm extends ConfigFormBase {
       'stripe_weekly_charge_enabled',
       'stripe_effective_date',
       'stripe_webhook_secret',
-      'premium_system_enabled',
-      'premium_payment_enabled',
-      'premium_definition_battery',
-      'premium_definition_value_threshold',
-      'premium_fee_amount',
-      'premium_pass_price',
+      'fee_system_enabled',
+      'fee_free_threshold',
+      'fee_value_increment',
+      'fee_step_amount',
+      'fee_battery_value_adder_enabled',
+      'fee_battery_value_adder',
     ];
 
     foreach ($keys_to_save as $key) {
         if (isset($values[$key])) {
             $config->set($key, $values[$key]);
         }
+    }
+
+    // Default Stripe Effective Date to today if enabled and blank.
+    if ($config->get('stripe_enabled') && empty($config->get('stripe_effective_date'))) {
+      $config->set('stripe_effective_date', date('Y-m-d'));
     }
 
     $config->save();

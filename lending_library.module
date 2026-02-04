@@ -21,23 +21,22 @@ use Drupal\lending_library\Service\LendingLibraryManagerInterface;
  * Implements hook_node_view().
  */
 function lending_library_node_view(array &$build, \Drupal\node\NodeInterface $node, \Drupal\Core\Entity\Display\EntityViewDisplayInterface $display, $view_mode) {
-  if ($node->bundle() === 'library_item' && $view_mode === 'full') {
+  if ($node->bundle() === 'library_item' && ($view_mode === 'full' || $view_mode === 'teaser')) {
     $config = \Drupal::config('lending_library.settings');
-    // Check if Premium System is enabled.
-    if (!$config->get('premium_system_enabled')) {
+    // Check if per-use fee system is enabled.
+    if (!$config->get('fee_system_enabled')) {
       return;
     }
 
     /** @var \Drupal\lending_library\Service\LendingLibraryManagerInterface $manager */
     $manager = \Drupal::service('lending_library.manager');
-    if ($manager->isPremiumItem($node)) {
-      $fee = $config->get('premium_fee_amount') ?: 10.00;
-      
-      $build['premium_badge'] = [
+    $fee = $manager->getPerUseFee($node);
+    if ($fee > 0) {
+      $build['per_use_fee_badge'] = [
         '#type' => 'markup',
-        '#markup' => '<div class="lending-library-premium-badge" style="background-color: #ffd700; color: #000; padding: 5px 10px; display: inline-block; font-weight: bold; margin-bottom: 10px; border-radius: 4px;">
-          <span class="premium-label">⭐ PREMIUM TOOL</span>
-          <span class="premium-cost">($' . number_format($fee, 2) . ' fee)</span>
+        '#markup' => '<div class="lending-library-fee-badge" style="background-color: #e6f0ff; color: #0b1f4d; padding: 5px 10px; display: inline-block; font-weight: bold; margin-bottom: 10px; border-radius: 4px;">
+          <span class="fee-label">Borrow fee:</span>
+          <span class="fee-cost">$' . number_format($fee, 2) . '</span>
         </div>',
         '#weight' => -100, // Display at the top
       ];
@@ -428,6 +427,49 @@ if (!empty($form[LENDING_LIBRARY_TRANSACTION_BORROW_BATTERIES_FIELD]['#access'])
   }
 
   if ($current_action === LENDING_LIBRARY_ACTION_WITHDRAW) {
+    // --- Proactive Payment Check ---
+    // If we know the user will fail validation due to missing payment method,
+    // tell them now and disable the submit button to save frustration.
+    $stripe_service = \Drupal::service('lending_library.stripe');
+    $needs_payment_method = FALSE;
+    
+    // Check global requirement.
+    if ($stripe_service->isCustomerRequiredForCheckout()) {
+      $needs_payment_method = TRUE;
+    }
+    // Check fee-specific requirement.
+    elseif ($library_item_node && \Drupal::config('lending_library.settings')->get('fee_system_enabled')) {
+      if ($manager->getPerUseFee($library_item_node) > 0) {
+        $needs_payment_method = TRUE;
+      }
+    }
+
+    if ($needs_payment_method) {
+      $user = User::load($current_user->id());
+      if ($user && !$stripe_service->hasStripeCustomer($user)) {
+        $billing_url = Url::fromRoute('mh_stripe.user_billing', ['user' => $current_user->id()])->toString();
+        
+        $form['payment_warning'] = [
+          '#type' => 'markup',
+          '#markup' => '<div role="alert" class="messages messages--warning">' 
+            . t('<strong>Payment Method Required:</strong> You must link a card before you can borrow this item. <a href="@url" class="button button--secondary" style="margin-left: 10px;">Add Payment Method</a>', ['@url' => $billing_url]) 
+            . '</div>',
+          '#weight' => -99,
+        ];
+
+        // Disable the primary submit button.
+        if (isset($form['actions']['submit'])) {
+          $form['actions']['submit']['#disabled'] = TRUE;
+          $form['actions']['submit']['#value'] = t('Payment Method Required');
+        }
+        // Disable the bottom submit button if it exists.
+        if (isset($form['submit_bottom'])) {
+          $form['submit_bottom']['#access'] = FALSE;
+        }
+      }
+    }
+    // --- End Proactive Check ---
+
     $due_date_display = t('N/A - Due date will be calculated upon withdrawal.');
     if ($transaction_entity->hasField(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD) && !$transaction_entity->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->isEmpty()) {
       $due_date_value_raw = $transaction_entity->get(LENDING_LIBRARY_TRANSACTION_DUE_DATE_FIELD)->value;
@@ -459,13 +501,34 @@ $config = \Drupal::config('lending_library.settings');
 $non_return_percentage = ($config->get('non_return_charge_percentage') ?: 150) / 100;
 $tool_replacement_charge = $replacement_value * $non_return_percentage;
 
+// Calculate per-use fee for display.
+$per_use_fee_amount = 0;
+$per_use_fee_msg = '';
+if ($config->get('fee_system_enabled')) {
+  $per_use_fee_amount = $manager->getPerUseFee($library_item_node);
+  if ($per_use_fee_amount > 0) {
+    $per_use_fee_msg = '<li><strong>Fee:</strong> A fee of $' . number_format($per_use_fee_amount, 2) . ' will be charged immediately upon checkout.</li>';
+  }
+}
+
 $replacements = [
   '[due_date]' => $due_date_display,
   '[replacement_value]' => number_format($replacement_value, 2),
   '[tool_replacement_charge]' => number_format($tool_replacement_charge, 2),
   '[daily_late_fee]' => '$' . number_format($config->get('daily_late_fee') ?: 0, 2),
   '[late_fee_cap_percentage]' => $config->get('late_fee_cap_percentage') ?: 100,
+  '[per_use_fee_msg]' => $per_use_fee_msg,
 ];
+
+// Append the fee message to the terms if the token isn't present in config.
+if (strpos($terms_html, '[per_use_fee_msg]') === FALSE && !empty($per_use_fee_msg)) {
+  // Insert before the closing </ul> if present, otherwise append.
+  if (strpos($terms_html, '</ul>') !== FALSE) {
+    $terms_html = str_replace('</ul>', $per_use_fee_msg . '</ul>', $terms_html);
+  } else {
+    $terms_html .= '<ul>' . $per_use_fee_msg . '</ul>';
+  }
+}
 
 $processed_terms = str_replace(array_keys($replacements), array_values($replacements), $terms_html);
 
@@ -652,64 +715,44 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
 
   switch ($action) {
     case LENDING_LIBRARY_ACTION_WITHDRAW:
-      // --- PREMIUM FEE LOGIC ---
+      // --- PER-USE FEE LOGIC ---
       $config = \Drupal::config('lending_library.settings');
-      if ($config->get('premium_system_enabled') && $config->get('premium_payment_enabled')) {
+      if ($config->get('fee_system_enabled')) {
         $manager = lending_library_manager();
-        if ($library_item_node && $manager->isPremiumItem($library_item_node)) {
-          $borrower_uid = $transaction_entity->getOwnerId();
-          $borrower = User::load($borrower_uid);
-          
-          // Check for Pass.
-          $has_pass = FALSE;
-          if ($borrower) {
-            // Check active boolean.
-            if ($borrower->hasField('field_library_pass_active') && $borrower->get('field_library_pass_active')->value) {
-              $has_pass = TRUE;
-            }
-            // Check expiry date (expiry date is the last valid day, so use >=).
-            if (!$has_pass && $borrower->hasField('field_library_pass_expiry') && !$borrower->get('field_library_pass_expiry')->isEmpty()) {
-              $expiry = $borrower->get('field_library_pass_expiry')->date;
-              if ($expiry && $expiry >= new DrupalDateTime('today')) {
-                $has_pass = TRUE;
-              }
-            }
-          }
-
-          if (!$has_pass) {
-            // Apply Charge.
-            $fee = $config->get('premium_fee_amount') ?: 10.00;
+        if ($library_item_node) {
+          $fee = $manager->getPerUseFee($library_item_node);
+          if ($fee > 0) {
+            $borrower_uid = $transaction_entity->getOwnerId();
+            $borrower = User::load($borrower_uid);
             $stripe_service = \Drupal::service('lending_library.stripe');
 
-            // Ensure we have a valid borrower before proceeding with payment.
             if (!$borrower) {
-              \Drupal::messenger()->addError(t('Unable to process premium tool checkout. Please contact staff.'));
+              \Drupal::messenger()->addError(t('Unable to process per-use fee checkout. Please contact staff.'));
               return;
             }
 
             if ($stripe_service->isEnabled() && $stripe_service->hasStripeCustomer($borrower)) {
               // Set fee on transaction before charging (needed for Stripe metadata).
               $transaction_entity->set('field_library_amount_due', $fee);
-              $transaction_entity->set('field_library_charges_status', 'premium_pending');
+              $transaction_entity->set('field_library_charges_status', 'per_use_pending');
               $transaction_entity->save();
 
-              $description = t('Premium Tool Fee: @tool', ['@tool' => $tool_name]);
+              $description = t('Borrow Fee: @tool', ['@tool' => $tool_name]);
               $charge_result = $stripe_service->createCharge(
                 $borrower,
                 $fee,
                 (string) $description,
                 $transaction_entity,
-                'premium_fee'
+                'per_use_fee'
               );
 
-              $stripe_service->updateTransactionWithChargeResult($transaction_entity, $charge_result, 'premium_fee');
+              $stripe_service->updateTransactionWithChargeResult($transaction_entity, $charge_result, 'per_use_fee');
 
               if ($charge_result['success']) {
-                \Drupal::messenger()->addStatus(t('Premium Fee of $@amount charged to your account.', ['@amount' => number_format($fee, 2)]));
+                \Drupal::messenger()->addStatus(t('Borrow fee of $@amount charged to your account.', ['@amount' => number_format($fee, 2)]));
               }
               else {
-                // Payment failed - block checkout.
-                \Drupal::messenger()->addError(t('Payment failed: @error. Please update your payment method before borrowing premium tools.', [
+                \Drupal::messenger()->addError(t('Payment failed: @error. Please update your payment method before borrowing.', [
                   '@error' => $charge_result['error'] ?? 'Unknown error',
                 ]));
                 $transaction_entity->delete();
@@ -718,19 +761,15 @@ function _lending_library_transaction_form_submit(array &$form, FormStateInterfa
               }
             }
             else {
-              // Stripe not enabled or user has no payment method - block checkout.
-              \Drupal::messenger()->addError(t('Premium tools require a payment method on file. Please add one before borrowing.'));
+              \Drupal::messenger()->addError(t('Borrow fees require a payment method on file. Please add one before borrowing.'));
+              $transaction_entity->delete();
               $form_state->setRedirectUrl(Url::fromRoute('mh_stripe.portal_self', ['user' => $borrower->id()]));
               return;
             }
           }
-          else {
-            // Has pass.
-            \Drupal::messenger()->addStatus(t('Premium Fee waived (Active Library Pass).'));
-          }
         }
       }
-      // --- END PREMIUM FEE LOGIC ---
+      // --- END PER-USE FEE LOGIC ---
 
       \Drupal::messenger()->addStatus(t('@tool_name has been successfully withdrawn. Please remember to take the tool.', ['@tool_name' => $tool_name]));
       \Drupal::service('lending_library.manager')->sendCheckoutEmail($transaction_entity);
@@ -1006,6 +1045,13 @@ function lending_library_entity_insert(EntityInterface $entity) {
                    $prev_uid = $battery->get(LENDING_LIBRARY_BATTERY_BORROWER_FIELD)->target_id;
                    if ((int) $prev_uid !== (int) $transaction_borrower_uid) {
                      $previous_borrower_msg = " (Taken from user $prev_uid)";
+                     // Close the previous transaction for this battery.
+                     \Drupal::service('lending_library.manager')->createBatteryTransaction(
+                       $battery,
+                       'return',
+                       $prev_uid,
+                       NULL // No associated tool transaction for this forced return
+                     );
                    }
                  }
               }
@@ -1175,6 +1221,63 @@ function lending_library_entity_insert(EntityInterface $entity) {
 }
 
 /**
+ * Implements hook_entity_predelete().
+ *
+ * Reverts item status if an open withdraw transaction is deleted.
+ */
+function lending_library_entity_predelete(EntityInterface $entity) {
+  if ($entity->getEntityTypeId() !== 'library_transaction' || $entity->bundle() !== 'library_transaction') {
+    return;
+  }
+
+  // Only concerned with Withdraw actions.
+  if ($entity->hasField(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD) &&
+      $entity->get(LENDING_LIBRARY_TRANSACTION_ACTION_FIELD)->value === LENDING_LIBRARY_ACTION_WITHDRAW) {
+
+    // If it has a return date, it's a closed history record; don't revert current status.
+    if ($entity->hasField(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD) &&
+        !$entity->get(LENDING_LIBRARY_TRANSACTION_RETURN_DATE_FIELD)->isEmpty()) {
+      return;
+    }
+
+    // Load the item.
+    if ($entity->hasField(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD) &&
+        !$entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->isEmpty()) {
+      $nid = $entity->get(LENDING_LIBRARY_TRANSACTION_ITEM_REF_FIELD)->target_id;
+      $item = \Drupal::entityTypeManager()->getStorage('node')->load($nid);
+
+      if ($item instanceof NodeInterface) {
+        $manager = lending_library_manager();
+        $details = $manager->getItemDetails($item);
+
+        // If the item is currently borrowed by this transaction's owner, reset it.
+        $borrower_uid = $entity->getOwnerId();
+        if ($entity->hasField(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD) && !$entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->isEmpty()) {
+          $borrower_uid = $entity->get(LENDING_LIBRARY_TRANSACTION_BORROWER_FIELD)->target_id;
+        }
+
+        if ($details['status'] === LENDING_LIBRARY_ITEM_STATUS_BORROWED &&
+            (int) $details['borrower_uid'] === (int) $borrower_uid) {
+
+          $item->set(LENDING_LIBRARY_ITEM_STATUS_FIELD, LENDING_LIBRARY_ITEM_STATUS_AVAILABLE);
+          $item->set(LENDING_LIBRARY_ITEM_BORROWER_FIELD, NULL);
+          // Reset available since date? Maybe.
+          if ($item->hasField('field_item_available_since')) {
+            $item->set('field_item_available_since', date('Y-m-d\TH:i:s'));
+          }
+          $item->save();
+
+          \Drupal::logger('lending_library')->notice(
+            'Reverted item @nid to Available because open transaction @tid was deleted.',
+            ['@nid' => $item->id(), '@tid' => $entity->id()]
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
  * Implements hook_cron().
  *
  * Finds overdue items and sends notifications or applies charges.
@@ -1279,18 +1382,19 @@ function lending_library_cron() {
             if ($transaction->hasField('field_library_charge_overdue')) {
                 $transaction->set('field_library_charge_overdue', $final_late_fee);
             }
+
+            // Mark as notified for record keeping.
+            if ($transaction->hasField('field_library_overdue_notified') && !$transaction->get('field_library_overdue_notified')->value) {
+              $transaction->set('field_library_overdue_notified', 1);
+            }
+
             $transaction->save();
 
-            if (!$transaction->hasField('field_library_overdue_notified') || !$transaction->get('field_library_overdue_notified')->value) {
-              \Drupal::service('lending_library.manager')->sendEmailByKey($transaction, 'overdue_late_fee', [
-                'amount_due' => $final_late_fee,
-                'transaction_id' => $transaction->id(),
-              ]);
-              if ($transaction->hasField('field_library_overdue_notified')) {
-                $transaction->set('field_library_overdue_notified', 1);
-                $transaction->save();
-              }
-            }
+            // Send overdue email whenever the fee increases (daily).
+            \Drupal::service('lending_library.manager')->sendEmailByKey($transaction, 'overdue_late_fee', [
+              'amount_due' => $final_late_fee,
+              'transaction_id' => $transaction->id(),
+            ]);
           }
         }
       }
@@ -1357,20 +1461,12 @@ function _lending_library_process_weekly_stripe_charges($logger) {
   }
 
   $threshold = $stripe_service->getAutoChargeThreshold();
-  $logger->notice('Processing weekly Stripe charges with threshold: $@threshold, effective date: @date', [
-    '@threshold' => number_format($threshold, 2),
-    '@date' => $effective_date,
-  ]);
-
-  // Convert effective date to timestamp for comparison with entity created time.
   $effective_timestamp = strtotime($effective_date);
 
-  // Query transactions with amount_due >= threshold
-  // that haven't been successfully charged yet.
-  // Only include transactions created on or after the effective date.
+  // 1. Find all unpaid transactions after the effective date.
   $query = \Drupal::entityQuery('library_transaction')
     ->accessCheck(FALSE)
-    ->condition('field_library_amount_due', $threshold, '>=')
+    ->condition('field_library_amount_due', 0, '>')
     ->condition('field_library_closed', 1, '<>')
     ->condition('created', $effective_timestamp, '>=');
 
@@ -1397,63 +1493,79 @@ function _lending_library_process_weekly_stripe_charges($logger) {
     ->getStorage('library_transaction')
     ->loadMultiple($transaction_ids);
 
-  $charged_count = 0;
-  $failed_count = 0;
-
+  // 2. Group transactions by Borrower.
+  $user_debts = [];
   foreach ($transactions as $transaction) {
     if (!$transaction->hasField('field_library_borrower') || $transaction->get('field_library_borrower')->isEmpty()) {
       continue;
     }
+    $uid = $transaction->get('field_library_borrower')->target_id;
+    $user_debts[$uid][] = $transaction;
+  }
 
-    $borrower_uid = $transaction->get('field_library_borrower')->target_id;
-    $user = User::load($borrower_uid);
+  $logger->notice('Processing weekly Stripe charges. Found @count eligible transactions across @user_count users.', [
+    '@count' => count($transactions),
+    '@user_count' => count($user_debts),
+  ]);
 
+  foreach ($user_debts as $uid => $user_transactions) {
+    $user = User::load($uid);
     if (!$user || !$stripe_service->hasStripeCustomer($user)) {
       continue;
     }
 
-    $amount_due = (float) $transaction->get('field_library_amount_due')->value;
-
-    // Get tool name for description.
-    $tool_name = 'Library Item';
-    if ($transaction->hasField('field_library_item') && !$transaction->get('field_library_item')->isEmpty()) {
-      $item = $transaction->get('field_library_item')->entity;
-      if ($item) {
-        $tool_name = $item->label();
-      }
+    // Sum total debt for this user.
+    $total_amount = 0;
+    foreach ($user_transactions as $t) {
+      $total_amount += (float) $t->get('field_library_amount_due')->value;
     }
 
-    $description = t('Library fee for @tool (weekly charge)', ['@tool' => $tool_name]);
+    // Check if total meets threshold.
+    if ($total_amount < $threshold) {
+      continue;
+    }
+
+    // 3. Process the aggregate charge.
+    // Use the latest transaction as the primary reference for metadata.
+    $primary_transaction = end($user_transactions);
+    $description = t('MakeHaven Library: Consolidated fees for @count items', [
+      '@count' => count($user_transactions),
+    ]);
+
     $charge_result = $stripe_service->createCharge(
       $user,
-      $amount_due,
+      $total_amount,
       (string) $description,
-      $transaction,
+      $primary_transaction,
       'weekly_batch'
     );
 
-    $stripe_service->updateTransactionWithChargeResult($transaction, $charge_result);
+    // 4. Update all transactions in this batch.
+    foreach ($user_transactions as $t) {
+      $stripe_service->updateTransactionWithChargeResult($t, $charge_result, 'late_fee');
+      if ($charge_result['success']) {
+        // If successful, we also mark it closed to prevent double charging.
+        if ($t->hasField('field_library_closed')) {
+          $t->set('field_library_closed', 1);
+          $t->save();
+        }
+      }
+    }
 
     if ($charge_result['success']) {
-      $charged_count++;
-      $logger->notice('Weekly Stripe charge successful: $@amount for transaction @tid', [
-        '@amount' => number_format($amount_due, 2),
-        '@tid' => $transaction->id(),
+      $logger->notice('Weekly Aggregate Charge Successful: $@amount for user @uid (@count transactions)', [
+        '@amount' => number_format($total_amount, 2),
+        '@uid' => $uid,
+        '@count' => count($user_transactions),
       ]);
     }
     else {
-      $failed_count++;
-      $logger->warning('Weekly Stripe charge failed for transaction @tid: @error', [
-        '@tid' => $transaction->id(),
+      $logger->warning('Weekly Aggregate Charge Failed for user @uid: @error', [
+        '@uid' => $uid,
         '@error' => $charge_result['error'] ?? 'Unknown error',
       ]);
     }
   }
-
-  $logger->notice('Weekly Stripe charging complete: @charged charged, @failed failed', [
-    '@charged' => $charged_count,
-    '@failed' => $failed_count,
-  ]);
 }
 
 /**

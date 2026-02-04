@@ -26,6 +26,7 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
   const ITEM_BORROWER_FIELD = 'field_library_item_borrower';
   const ITEM_WAITLIST_FIELD = 'field_library_item_waitlist';
   const ITEM_REPLACEMENT_VALUE_FIELD = 'field_library_item_replacement_v';
+  const ITEM_USES_BATTERY_FIELD = 'field_library_item_uses_battery';
 
   const TRANSACTION_ACTION_FIELD = 'field_library_action';
   const TRANSACTION_ITEM_REF_FIELD = 'field_library_item';
@@ -596,46 +597,62 @@ class LendingLibraryManager implements LendingLibraryManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function isPremiumItem(NodeInterface $library_item_node) {
+  public function getPerUseFee(NodeInterface $library_item_node): float {
     if ($library_item_node->bundle() !== self::ITEM_NODE_TYPE) {
-      return FALSE;
+      return 0.0;
     }
 
     $config = $this->configFactory->get('lending_library.settings');
-
-    // If premium system is disabled, no items are premium.
-    if (!$config->get('premium_system_enabled')) {
-      return FALSE;
+    if (!$config->get('fee_system_enabled')) {
+      return 0.0;
     }
 
-    // Check Battery Criteria
-    $battery_is_premium = $config->get('premium_definition_battery');
-    // Default to TRUE if config is missing to match the safe "more restrictive" fallback,
-    // or FALSE if you prefer to be permissive. Given the user's request, let's trust the explicit config or default from install.
-    // However, if config is null, it evaluates to false-ish usually.
-    // Let's use the same defaults as the form/install.
-    if ($battery_is_premium === NULL) $battery_is_premium = TRUE;
+    $fee_free_threshold = (float) ($config->get('fee_free_threshold') ?? 150);
+    $fee_value_increment = (float) ($config->get('fee_value_increment') ?? 500);
+    $fee_step_amount = (float) ($config->get('fee_step_amount') ?? 5);
+    $battery_adder_enabled = (bool) ($config->get('fee_battery_value_adder_enabled') ?? TRUE);
+    $battery_value_adder = (float) ($config->get('fee_battery_value_adder') ?? 150);
 
-    if ($battery_is_premium) {
-      if ($library_item_node->hasField('field_library_item_uses_battery') && !$library_item_node->get('field_library_item_uses_battery')->isEmpty()) {
-        if ($library_item_node->get('field_library_item_uses_battery')->value == 1) {
-          return TRUE;
-        }
-      }
+    // Guard against invalid configuration.
+    if ($fee_value_increment <= 0 || $fee_step_amount <= 0) {
+      return 0.0;
     }
 
-    // Check Value Criteria
-    $value_threshold = $config->get('premium_definition_value_threshold');
-    if ($value_threshold === NULL) $value_threshold = 150;
+    $item_details = $this->getItemDetails($library_item_node);
+    $replacement_value = (float) ($item_details['replacement_value'] ?? 0);
 
-    if ($value_threshold > 0) {
-      $item_details = $this->getItemDetails($library_item_node);
-      $value = $item_details['replacement_value'] ?? 0;
-      if ($value >= $value_threshold) {
-        return TRUE;
-      }
+    $uses_battery = FALSE;
+    if ($library_item_node->hasField(self::ITEM_USES_BATTERY_FIELD)
+      && !$library_item_node->get(self::ITEM_USES_BATTERY_FIELD)->isEmpty()) {
+      $uses_battery = (bool) $library_item_node->get(self::ITEM_USES_BATTERY_FIELD)->value;
     }
 
-    return FALSE;
+    if ($uses_battery && $battery_adder_enabled && $replacement_value <= 0) {
+      $this->logger->warning('Battery tool @nid is missing replacement value; fee calculation uses battery adder only.', [
+        '@nid' => $library_item_node->id(),
+      ]);
+    }
+
+    // Effective value = replacement value + battery adder (if enabled and applicable).
+    $effective_value = $replacement_value + (($uses_battery && $battery_adder_enabled) ? $battery_value_adder : 0);
+
+    if ($effective_value < $fee_free_threshold) {
+      return 0.0;
+    }
+
+    // Fee formula:
+    // steps = 1 + floor((effective_value - fee_free_threshold) / fee_value_increment)
+    // fee = steps * fee_step_amount
+    $steps = 1 + (int) floor(($effective_value - $fee_free_threshold) / $fee_value_increment);
+    $fee = $steps * $fee_step_amount;
+
+    return (float) $fee;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isFeeItem(NodeInterface $library_item_node): bool {
+    return $this->getPerUseFee($library_item_node) > 0;
   }
 }

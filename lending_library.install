@@ -274,3 +274,70 @@ function lending_library_update_10008() {
 
   return t('Premium status values already exist.');
 }
+
+/**
+ * Add per-use fee status values to field_library_charges_status.
+ */
+function lending_library_update_10009() {
+  $field_storage = \Drupal::entityTypeManager()
+    ->getStorage('field_storage_config')
+    ->load('library_transaction.field_library_charges_status');
+
+  if (!$field_storage) {
+    return t('Field storage not found.');
+  }
+
+  $settings = $field_storage->get('settings');
+  $allowed_values = $settings['allowed_values'] ?? [];
+
+  $existing_keys = array_column($allowed_values, 'value');
+  $added = [];
+
+  if (!in_array('per_use_pending', $existing_keys)) {
+    $allowed_values[] = [
+      'value' => 'per_use_pending',
+      'label' => 'Per-use fee pending',
+    ];
+    $added[] = 'per_use_pending';
+  }
+
+  if (!in_array('per_use_paid', $existing_keys)) {
+    $allowed_values[] = [
+      'value' => 'per_use_paid',
+      'label' => 'Per-use fee paid',
+    ];
+    $added[] = 'per_use_paid';
+  }
+
+  if (!empty($added)) {
+    $settings['allowed_values'] = $allowed_values;
+    $field_storage->set('settings', $settings);
+    $field_storage->save();
+    return t('Added status values: @values', ['@values' => implode(', ', $added)]);
+  }
+
+  return t('Per-use fee status values already exist.');
+}
+
+/**
+ * Set default values for Per-Use Fee settings.
+ */
+function lending_library_update_10010() {
+  $config = \Drupal::configFactory()->getEditable('lending_library.settings');
+  $defaults = [
+    'fee_system_enabled' => false,
+    'fee_free_threshold' => 150,
+    'fee_value_increment' => 500,
+    'fee_step_amount' => 5,
+    'fee_battery_value_adder_enabled' => true,
+    'fee_battery_value_adder' => 150,
+  ];
+
+  foreach ($defaults as $k => $v) {
+    if ($config->get($k) === NULL) {
+      $config->set($k, $v);
+    }
+  }
+
+  $config->save();
+}
